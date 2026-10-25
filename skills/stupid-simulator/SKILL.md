@@ -88,6 +88,11 @@ stupidsim ui-tree <udid> --labelled            # confirm you are where you meant
   then retry.
 - **Wait for launches to settle** before reading the screen. `simctl launch` returns before the
   first frame; a second or two of sleep, or polling `ui-tree`, avoids reading the previous app.
+- **Building with `stupid-app`** (the stupid-app-cli skill): `stupid-app run --simulator --udid
+  <udid>` builds, installs and launches through `simctl` and opens no window, so it pairs with
+  `stupidsim` as is, and a running stupid simulator app gives the device a window. It returns as soon
+  as the app launches, before its first frame: wait or poll `ui-tree` for the app's name before
+  acting.
 - **`simctl openurl` can time out** on a device still settling after boot (`Operation timed out`).
   Wait and retry.
 
