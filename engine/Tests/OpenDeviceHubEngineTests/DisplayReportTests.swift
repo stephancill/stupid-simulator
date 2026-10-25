@@ -154,9 +154,24 @@ import XPC
         #expect(report.activeIntegrated?.uniqueID == "PurpleMain")
     }
 
-    @Test func aBuiltInScreenWithNoStateIsStillNoAnswer() {
+    @Test func theOnlyBuiltInScreenIsActiveWhateverItsBacklightSays() throws {
+        // As a freshly booted iOS 26.3 device reports it while its screen is lit.
+        let report = try DisplayReport.parse(output(backlight: "off", [
+            record(id: nil, deviceName: "PurpleMain", displayID: 1, active: nil, backlight: nil, rotation: "rot0"),
+            record(id: nil, deviceName: "PurpleTVOut", name: "TVOut", displayID: 2, active: nil, backlight: nil, integrated: false),
+        ]))
+        let active = try #require(report.activeIntegrated)
+        #expect(active.uniqueID == "PurpleMain")
+        #expect(active.backlight == .off)
+        #expect(report.isSettled)
+    }
+
+    @Test func twoBuiltInScreensWithNoStateIsStillNoAnswer() {
         #expect(throws: (any Error).self) {
-            try DisplayReport.parse(output([record(active: nil, backlight: nil)]))
+            try DisplayReport.parse(output([
+                record(id: "a", displayID: 1, active: nil, backlight: nil),
+                record(id: "b", displayID: 3, active: nil, backlight: nil),
+            ]))
         }
         #expect(throws: (any Error).self) {
             try DisplayReport.parse(output([record(id: nil, active: nil, backlight: "activeOn")]))

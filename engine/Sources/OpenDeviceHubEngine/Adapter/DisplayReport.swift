@@ -44,9 +44,12 @@ public struct DisplayReport: Sendable, Hashable {
     public var integrated: [Display] { displays.filter(\.isIntegrated) }
 
     /// Device Hub's rule: a report naming a panel whose backlight is off "cannot be right". The
-    /// other panel's backlight lags for a few seconds after a fold, so it is not checked.
+    /// other panel's backlight lags for a few seconds after a fold, so it is not checked. A device
+    /// with one built in screen has no panel to get wrong, and iOS 26.3 reports its backlight off
+    /// while the screen is lit, so it is always settled.
     public var isSettled: Bool {
         guard let active = activeIntegrated else { return false }
+        guard integrated.count > 1 else { return true }
         switch active.backlight {
         case .activeOn, .activeDimmed, .unknown: return true
         case .off, .inactiveOn: return false
@@ -71,6 +74,7 @@ public struct DisplayReport: Sendable, Hashable {
             throw EngineError.privateCall(symbol: "displayinfo", message: "the report lists too many displays")
         }
         let carriesLayoutActivity = records.contains { XPCValue.bool($0, "active") != nil }
+        let integratedCount = records.filter(isIntegrated).count
         // An ordinary phone writes one backlight for the whole device rather than one per display.
         let deviceBacklight = XPCValue.string(output, "backlightState")
         var seen: Set<String> = []
@@ -82,9 +86,7 @@ public struct DisplayReport: Sendable, Hashable {
                   seen.insert(uniqueID).inserted else {
                 throw EngineError.privateCall(symbol: "displayinfo", message: "a display has no identity of its own")
             }
-            let integrated = XPCValue.dictionary(record, "type").map {
-                xpc_dictionary_get_value($0, "integrated") != nil
-            } ?? false
+            let integrated = isIntegrated(record)
             let backlightName = XPCValue.string(record, "backlightState") ?? (integrated ? deviceBacklight : nil)
             let backlight = Backlight(rawValue: backlightName ?? "") ?? .unknown
             let isActive: Bool
@@ -94,6 +96,10 @@ public struct DisplayReport: Sendable, Hashable {
                     throw EngineError.privateCall(symbol: "displayinfo", message: "a display has no activity")
                 }
                 isActive = active
+            } else if integrated, integratedCount == 1 {
+                // The only built in screen is the one the guest lays out on. Its backlight cannot
+                // say otherwise: iOS 26.3 reports it off while the screen is lit.
+                isActive = true
             } else {
                 switch backlight {
                 case .activeOn, .activeDimmed: isActive = true
@@ -134,6 +140,10 @@ public struct DisplayReport: Sendable, Hashable {
             ))
         }
         return DisplayReport(displays: displays)
+    }
+
+    private static func isIntegrated(_ record: xpc_object_t) -> Bool {
+        XPCValue.dictionary(record, "type").map { xpc_dictionary_get_value($0, "integrated") != nil } ?? false
     }
 
     /// The report writes a rotation as `rot0`, `rot90`, `rot180` or `rot270`.

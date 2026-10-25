@@ -24,9 +24,14 @@ its own". Observed on Xcode 27 (27A266a):
 - iOS 26.3 runtimes write no `uniqueId`; each display only has a `deviceName` (`PurpleMain`,
   `PurpleTVOut`, ...).
 
+- A freshly booted iOS 26.3 device reports the device wide backlight as `off` while its screen is
+  lit (`devicectl device info displays` says the same).
+
 The parser now falls back to the device wide backlight for integrated displays, treats a
 non-integrated display with no state as inactive, and names a display by `deviceName` when it has no
-`uniqueId`. A built in screen with no state at all is still refused.
+`uniqueId`. A device's only built in screen is always the active one and always settled; the
+backlight is only consulted to choose between a foldable's panels. Two built in screens with no
+state are still refused.
 
 ## Keyboard input
 
@@ -47,9 +52,12 @@ non-integrated display with no state as inactive, and names a display by `device
 
 ## Known gaps
 
-- On iOS 26 runtimes, touches sent through `IndigoHIDMessageForMouseNSEvent` are dropped or read
-  as Home gestures, and so are rotation and the home gesture. Baguette works around this with an
-  IOHIDEvent digitizer path (`IOHIDDigitizerDispatch`).
+- A long lived simulator can stop acting on host input altogether: every message is accepted and
+  nothing happens, for touches, keys, rotation and buttons alike. Seen on an iOS 26.3 device that
+  had been booted for a long time with OpenDeviceHub and Device Hub both attached; a freshly booted
+  iOS 26.3 device took the same taps and typing. So iOS 26 input works through the existing
+  `IndigoHIDMessageForMouseNSEvent` path under Xcode 27. (Baguette's IOHIDEvent digitizer path was
+  tried and was not needed.)
 - `button home` and `button lock` did nothing on iOS 27.0 in testing, while `home-swipe` worked.
 - Input commands report success when CoreSimulator accepts the message, which says nothing about
   whether the guest acted on it.
