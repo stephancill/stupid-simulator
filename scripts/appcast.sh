@@ -14,7 +14,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-app="${repo_root}/build/Stupid Simulator.app"
+app="${repo_root}/build/stupid simulator.app"
 [ -d "${app}" ] || { echo "No app at ${app}" >&2; exit 1; }
 
 version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "${app}/Contents/Info.plist")"
@@ -77,9 +77,9 @@ cat > "${output}" <<XML
 <?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
-    <title>Stupid Simulator</title>
+    <title>stupid simulator</title>
     <link>https://stephancill.github.io/stupid-simulator/appcast.xml</link>
-    <description>Updates for Stupid Simulator.</description>
+    <description>Updates for stupid simulator.</description>
     <language>en</language>
     <item>
       <title>${version}</title>

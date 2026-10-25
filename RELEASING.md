@@ -58,9 +58,9 @@ unsigned build that reaches a release page is worse than a run that stops.
 4. Install the dry run's DMG and use it. `stapler validate` on the app and on the DMG, and
    `shasum -c SHA256SUMS` from a different directory.
 5. Run the workflow again with `publish` **true**. It creates the tag and a release marked as the
-   latest, carrying the DMG under its versioned name, the same DMG as `Stupid Simulator.dmg`,
+   latest, carrying the DMG under its versioned name, the same DMG as `stupid simulator.dmg`,
    `SHA256SUMS` and the signed `appcast.xml`. The README's download button and its Install link fetch
-   `Stupid Simulator.dmg` from the latest release, so they need no edit.
+   `stupid simulator.dmg` from the latest release, so they need no edit.
 6. **Only once that release page exists**, commit the release's `appcast.xml` to the feed
    repository. Installed copies read the feed from there, never from the release, which is why the
    feed URL can never move. A feed pointing at a download that is not there yet breaks updates for

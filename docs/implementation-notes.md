@@ -1,11 +1,11 @@
 # Implementation notes
 
-What Stupid Simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
+What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
 ## Rebrand
 
-- App: `Stupid Simulator.app`, executable `StupidSimulator`, bundle identifier
+- App: `stupid simulator.app` (the name is lowercase everywhere users see it), executable `StupidSimulator`, bundle identifier
   `net.stupidtech.stupidsimulator` (so it installs beside upstream), URL scheme `stupidsim://`.
 - CLI: `stupidsim`, and `stupidsim-viewer` for the bare viewer. Only the SwiftPM product names
   changed; the targets, modules and source directories keep upstream's names (`odhub`,
@@ -17,6 +17,11 @@ v0.2.0), and what has been verified where. Newest first.
 - Release scripts point at `github.com/stephancill/stupid-simulator`. There is no signed release
   or appcast yet.
 - Code comments that mention `odhub` were left as they are, again for cherry-picking.
+- Icon: `packaging/AppIcon.png` (a drawing on white) replaces upstream's drawn devices.
+  `make-icon.swift` places it on Apple's icon grid, an 864 unit plate rounded at 190 in a 1024
+  canvas, for the app's iconset and the `icons/` files. The social preview and download button are
+  ink on paper to match. The vector `icon.svg` was removed, as it was a copy of upstream's artwork.
+  At 16 and 32 pixels the thin line fades to grey.
 
 ## Agent oriented CLI
 

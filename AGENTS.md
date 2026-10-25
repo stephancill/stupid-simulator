@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Stupid Simulator is a fork of [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub): a native
+stupid simulator is a fork of [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub): a native
 macOS app that shows iOS simulators in their own windows on Xcode 27+ (where Simulator.app was
 replaced by Device Hub), plus a command line tool, `stupidsim`, for driving simulators from scripts
 and agents.

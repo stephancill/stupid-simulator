@@ -2,8 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Stupid Simulator</string>
-  <key>CFBundleDisplayName</key><string>Stupid Simulator</string>
+  <key>CFBundleName</key><string>stupid simulator</string>
+  <key>CFBundleDisplayName</key><string>stupid simulator</string>
   <key>CFBundleIdentifier</key><string>net.stupidtech.stupidsimulator</string>
   <key>CFBundleExecutable</key><string>StupidSimulator</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>

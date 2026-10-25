@@ -1,5 +1,5 @@
 #!/bin/bash
-# Signs build/Stupid Simulator.app with Developer ID and the hardened runtime.
+# Signs build/stupid simulator.app with Developer ID and the hardened runtime.
 #
 # Inside out, deepest first. Code signing seals a bundle around what it contains, so signing the
 # outer app first and a nested helper afterwards invalidates the outer seal. Notarization then
@@ -14,7 +14,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-app="${1:-${repo_root}/build/Stupid Simulator.app}"
+app="${1:-${repo_root}/build/stupid simulator.app}"
 identity="${ODH_SIGNING_IDENTITY:-}"
 entitlements="${ODH_ENTITLEMENTS:-}"
 

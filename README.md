@@ -2,14 +2,14 @@
   <img src="icons/icon-256.png" width="116" alt="">
 </p>
 
-<h1 align="center">Stupid Simulator</h1>
+<h1 align="center">stupid simulator</h1>
 
 <p align="center">
   <strong>Your iOS simulators in windows again, and a command line agents can trust.</strong>
 </p>
 
 <p align="center">
-  Xcode 27 replaced Simulator.app with Device Hub. Stupid Simulator connects to the same simulators
+  Xcode 27 replaced Simulator.app with Device Hub. stupid simulator connects to the same simulators
   Xcode installs and brings back the familiar window, scaling and shortcuts, with a command line
   tool for driving a device from a script or an agent.
 </p>
@@ -20,7 +20,7 @@
 
 ## A fork of OpenDeviceHub
 
-Stupid Simulator is a fork of [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) v0.2.0.
+stupid simulator is a fork of [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) v0.2.0.
 It keeps upstream's app and adds what driving simulators from scripts and agents needed:
 
 - **Typing works**: `type` sends keys the device acts on, with Shift for capitals and symbols, and
@@ -37,10 +37,10 @@ What changed, why, and what was verified on which Xcode and runtime is in
 ## Install
 
 There is no signed release yet. Build it from source (see [Building from source](#building-from-source)),
-then copy `build/Stupid Simulator.app` to Applications. In-app updates are off until this fork
+then copy `build/stupid simulator.app` to Applications. In-app updates are off until this fork
 publishes its own signed feed.
 
-The `stupidsim` command line tool ships inside the bundle. Choose **Stupid Simulator → Install
+The `stupidsim` command line tool ships inside the bundle. Choose **stupid simulator → Install
 Command Line Tool** and it links `stupidsim` into a folder already on your `PATH`, asking for your
 password only if every such folder belongs to the system. **Remove Command Line Tool** takes it away
 again.
@@ -157,7 +157,7 @@ aware tooling this exists for.
 ## Working with Device Hub
 
 Xcode 27 opens Device Hub itself when you run an app on a simulator, and other tools may launch it
-too. Stupid Simulator shows the same devices, so both can be on screen at once. Two of Apple's own
+too. stupid simulator shows the same devices, so both can be on screen at once. Two of Apple's own
 settings make them share better.
 
 Quitting Device Hub can shut down the simulators it started, which closes their windows here. To stop
@@ -176,7 +176,7 @@ defaults write com.apple.dt.Xcode DVTiPhoneSimulatorAlwaysLaunchInCoreSimulatorS
 Xcode then boots the simulator without a window of its own and yours is the one you use. With this
 on, boot the device here before pressing Run, or Xcode may shut it down when you press Stop.
 
-**Stupid Simulator → Settings → Links** offers to open `devices://` links here instead. That covers
+**stupid simulator → Settings → Links** offers to open `devices://` links here instead. That covers
 links only. Nothing can take over from a tool that launches Device Hub directly, because it is
 launched by name rather than through the link.
 
@@ -192,7 +192,7 @@ load.
 
 ```sh
 scripts/build.sh              # the executables
-scripts/build-app.sh release  # build/Stupid Simulator.app
+scripts/build-app.sh release  # build/stupid simulator.app
 swift test --package-path engine
 ```
 
@@ -215,7 +215,7 @@ frameworks out of your Xcode. Maintainers cutting a release want [RELEASING.md](
 
 ## License
 
-[MIT](LICENSE). Stupid Simulator is a fork of
+[MIT](LICENSE). stupid simulator is a fork of
 [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) by Samuel Abada (MIT). The Indigo touch
 message layout and hardware button constants are adapted from
 [idb](https://github.com/facebook/idb) (Meta Platforms, MIT) and the rotation path from Siniulator
@@ -223,7 +223,7 @@ message layout and hardware button constants are adapted from
 
 ## Disclaimer
 
-Stupid Simulator is an independent open source project, and not endorsed by the OpenDeviceHub
+stupid simulator is an independent open source project, and not endorsed by the OpenDeviceHub
 maintainers. It is not affiliated with, endorsed by or
 sponsored by Apple Inc.
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds build/Stupid Simulator.app: the viewer, the stupidsim CLI beside it, an Info.plist and an icon.
+# Builds build/stupid simulator.app: the viewer, the stupidsim CLI beside it, an Info.plist and an icon.
 #
 # The bundle is what gives the app its name. Run as a bare executable it is called stupidsim-viewer,
 # because that is all macOS has to go on; inside a bundle the name comes from CFBundleName.
@@ -18,7 +18,7 @@ case "${configuration}" in
   *) echo "Usage: $0 [debug|release]" >&2; exit 1 ;;
 esac
 
-app="${repo_root}/build/Stupid Simulator.app"
+app="${repo_root}/build/stupid simulator.app"
 contents="${app}/Contents"
 
 if [ "${configuration}" = "release" ]; then

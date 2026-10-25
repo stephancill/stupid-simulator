@@ -1,7 +1,7 @@
 import Foundation
 
 public enum Brand {
-    public static let productName = "Stupid Simulator"
+    public static let productName = "stupid simulator"
     public static let commandName = "stupidsim"
     public static let viewerExecutableName = "stupidsim-viewer"
     public static let bundledViewerExecutableName = "StupidSimulator"

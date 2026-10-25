@@ -6,11 +6,11 @@ body:
     attributes:
       value: |
         `stupidsim doctor` prints almost everything asked for below. If the command is not on your
-        PATH yet, use **Stupid Simulator → Install Command Line Tool**, or run it straight out of the
+        PATH yet, use **stupid simulator → Install Command Line Tool**, or run it straight out of the
         bundle:
 
         ```sh
-        /Applications/Stupid Simulator.app/Contents/MacOS/stupidsim doctor
+        /Applications/stupid simulator.app/Contents/MacOS/stupidsim doctor
         ```
 
   - type: textarea
@@ -28,7 +28,7 @@ body:
   - type: input
     id: app-version
     attributes:
-      label: Stupid Simulator version
+      label: stupid simulator version
       description: From the app menu, or `stupidsim --version`. Say "built from source" if it is.
       placeholder: "0.1.0"
     validations:

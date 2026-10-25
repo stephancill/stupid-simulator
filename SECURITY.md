@@ -21,8 +21,8 @@ capability rather than crashing.
 
 **Every private call is checked first.** Classes are looked up by name and selectors through
 `respondsToSelector:` before use, and everything crossing that boundary is treated as possibly nil.
-Private API access is confined to two directories, `engine/Sources/Stupid SimulatorPrivate` and
-`engine/Sources/Stupid SimulatorEngine/Adapter`; no other file may touch a private symbol.
+Private API access is confined to two directories, `engine/Sources/stupid simulatorPrivate` and
+`engine/Sources/stupid simulatorEngine/Adapter`; no other file may touch a private symbol.
 
 **It can drive your simulators.** Taps, keystrokes and hardware buttons go to simulators on your
 machine, from the app and from the `stupidsim` command. It does not touch physical devices.

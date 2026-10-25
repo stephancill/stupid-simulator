@@ -14,7 +14,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-app="${repo_root}/build/Stupid Simulator.app"
+app="${repo_root}/build/stupid simulator.app"
 
 echo "== build =="
 "${repo_root}/scripts/build-app.sh" release
