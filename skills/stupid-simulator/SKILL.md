@@ -56,6 +56,7 @@ stupidsim ui-tree <udid> --labelled            # confirm you are where you meant
 | Pinch | `stupidsim pinch <udid> --from 0.2 --to 0.7 [--x --y --angle]` |
 | Type | `stupidsim type <udid> 'Hello@example.com #1!' [--verify]` |
 | Home, Lock, volume | `stupidsim button <udid> home\|lock\|volume-up\|volume-down [--verify]` |
+| Show/hide on-screen keyboard | `stupidsim button <udid> software-keyboard` (needs a focused text field) |
 | Home gesture, app switcher | `stupidsim home-swipe <udid>`, `stupidsim app-switcher <udid>` |
 | Rotate | `stupidsim rotate <udid> portrait\|landscapeLeft\|landscapeRight\|portraitUpsideDown` |
 | Pasteboard | `stupidsim paste <udid> 'text'` (reads it back, fails if overwritten), `stupidsim copy <udid>` |

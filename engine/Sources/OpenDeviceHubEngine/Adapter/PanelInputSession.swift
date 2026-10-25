@@ -100,6 +100,7 @@ public final class PanelInputSession: InputSession, @unchecked Sendable {
         .volumeDown: 0xea,
         .siri: 0xcf,
         .cameraControl: 0x65,
+        .softwareKeyboard: 0xb8,
     ]
 
     private func send(_ type: String, payload: xpc_object_t) {

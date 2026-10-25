@@ -129,6 +129,14 @@ locks the device, three times out of three on both runtimes, with the default 15
 usage 0x40 (Menu) on the arbitrary builder also goes home, and is kept in reserve. Siri (event
 source 0x400002) was not driven: Baguette reports that Siri presses crash `backboardd`.
 
+Toggle Software Keyboard (⌘K, as in the classic Simulator, and `stupidsim button <udid>
+software-keyboard`) presses consumer usage 0xB8 (Eject) on the same consumer page path as the volume
+keys. iOS answers Eject by showing or hiding the on-screen keyboard while a text field has focus and
+a hardware keyboard is connected; it is the key iOS keyboards and barcode scanners use for this.
+Verified on Xcode 27 (27A266a) in Settings search on iOS 27.0 and iOS 26.3: each press flipped the
+keyboard, three presses in a row, checked with `ui-tree` (the `shift` and `space` keys appear and
+disappear). With no text field focused it does nothing.
+
 ## Keyboard input
 
 - `IndigoHIDMessageForKeyboardArbitrary(usage, isDown)` builds a message the guest accepts and then

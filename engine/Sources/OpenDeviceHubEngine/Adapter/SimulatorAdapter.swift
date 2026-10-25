@@ -107,6 +107,9 @@ public enum HardwareButton: Sendable, Hashable {
     case siri
     case actionButton
     case cameraControl
+    /// The Eject key, which iOS answers by showing or hiding the software keyboard while a
+    /// hardware keyboard is connected. Not a button on the device, but it travels the same way.
+    case softwareKeyboard
 }
 
 public enum ButtonPhase: Sendable, Hashable {

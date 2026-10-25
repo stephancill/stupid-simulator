@@ -393,7 +393,15 @@ public enum ViewerMenu {
         )
         target.track(sameLanguage, as: .keyboardLanguage)
         disable(sameLanguage, unless: capabilities.contains(.hardwareKeyboard), reason: "not available on this Xcode")
+        let software = target.item(
+            "Toggle Software Keyboard",
+            #selector(MenuTarget.softwareKeyboard),
+            "k",
+            [.command]
+        )
+        disable(software, unless: capabilities.contains(.hardwareButtons), reason: "not available on this Xcode")
         keyboardMenu.addItem(sameLanguage)
+        keyboardMenu.addItem(software)
         keyboardMenu.addItem(hardware)
         keyboardItem.submenu = keyboardMenu
         ioMenu.addItem(keyboardItem)
@@ -712,6 +720,7 @@ public final class MenuTarget: NSObject, NSMenuDelegate, NSMenuItemValidation {
     @objc func siri() { actions.pressButton(.siri) }
     @objc func actionButton() { actions.pressButton(.actionButton) }
     @objc func cameraControl() { actions.pressButton(.cameraControl) }
+    @objc func softwareKeyboard() { actions.pressButton(.softwareKeyboard) }
     @objc func appSwitcher() { actions.appSwitcher() }
     @objc func restart() { actions.restart() }
     @objc func shutdown() { actions.shutdown() }

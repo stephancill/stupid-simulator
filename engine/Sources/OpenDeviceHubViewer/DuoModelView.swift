@@ -949,6 +949,7 @@ public final class DuoModelView: SCNView {
         case .siri: "waveform"
         case .actionButton: "button.horizontal"
         case .cameraControl: "camera"
+        case .softwareKeyboard: "keyboard"
         }
     }
 
@@ -961,6 +962,7 @@ public final class DuoModelView: SCNView {
         case .siri: "Siri"
         case .actionButton: "Action Button"
         case .cameraControl: "Camera Control"
+        case .softwareKeyboard: "Software Keyboard"
         }
     }
 

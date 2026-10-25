@@ -136,6 +136,7 @@ enum IndigoHID {
             .volumeUp: 0xe9,
             .volumeDown: 0xea,
             .cameraControl: 0x65,
+            .softwareKeyboard: 0xb8,
         ]
     }
 
