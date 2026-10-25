@@ -1,37 +1,152 @@
 # Releasing
 
-For maintainers. Nothing here contains a credential; the values live outside this repository and
-reach the workflow as repository secrets.
+For maintainers. Nothing here contains a credential: the signing identity lives in the login
+keychain and the App Store Connect key in a file outside the repository.
 
-## Two values that must never change
+Releases are cut **locally**, on a Mac with Xcode 27, with `scripts/sign-and-notarize.sh` and
+`gh release create`. The **Release** workflow in `.github/workflows/release.yml` runs the same scripts
+on GitHub Actions, but needs the repository secrets listed at the end, which are not set up yet.
+
+## Values that must never change
 
 | Value | Why |
 |---|---|
-| The bundle identifier | A new one makes macOS treat the app as a different one, orphaning every installed copy. |
-| The update feed URL | The installed app keeps asking the old URL. Changing it silently ends updates for everyone, with no way to push a fix. |
+| The bundle identifier, `net.stupidtech.stupidsimulator` | A new one makes macOS treat the app as a different one, orphaning every installed copy. |
+| A version number once published | Releases are compared by version and build number; reusing one hides the new build from anyone who saw the old. |
+| The update feed URL, once there is one | The installed app keeps asking the old URL. Changing it silently ends updates for everyone. |
 
-Both are based on a GitHub handle rather than the product name or a domain, so the app can be
-renamed and the repository moved without touching either. The feed itself lives in a separate
-repository served by GitHub Pages; the enclosure URLs inside it point at this repository's release
-downloads and are rewritten on every release.
+In-app updates are **off**: `packaging/Info.plist` has no `SUFeedURL` or `SUPublicEDKey`, so the
+updater is never created and `sign-and-notarize.sh` skips the feed step. Turning them on needs a
+Sparkle key pair, a feed repository served over HTTPS, and the Sparkle steps below.
 
-## Before the first release on a new machine
+## What a machine needs
 
-- A **Developer ID Application** certificate in the login keychain. Not Apple Development, which
-  notarization rejects.
-- An App Store Connect **Team** API key with the Developer role. An **Individual** key does not work
-  with `notarytool`, and the failure only shows up at submission.
-- The Sparkle update key pair. The public half is compiled into the app; the private half signs the
-  feed.
-- create-dmg 8.1.0, which lays out the disk image window and draws its disk icon:
-  `npm install --global create-dmg@8.1.0` (Node 20 or newer). `scripts/package-dmg.sh` refuses any
-  other version, so a disk image made by hand matches the one the workflow makes.
+- A **Developer ID Application** identity in the login keychain (`security find-identity -v -p
+  codesigning`). Not Apple Development or Apple Distribution, which notarization rejects.
+- An App Store Connect **Team** API key (`.p8`, or the same key as PEM) with its key ID and issuer
+  ID, from the same team as the identity. An Individual key does not work with `notarytool`, and the
+  failure only shows up at submission.
+- `create-dmg` 8.1.0 on `PATH` (`bun add -g create-dmg@8.1.0`, or `npm install --global
+  create-dmg@8.1.0`). `scripts/package-dmg.sh` refuses any other version.
+- `gh`, signed in with write access to `stephancill/stupid-simulator`.
 
-**If the update private key is lost, no installed copy can ever be updated again.** A later release
-cannot fix it, because the installed app only trusts the public key baked into the copy someone
-already has. Keep it in a password manager as well as in the repository secret.
+## Making a release
 
-## Repository secrets
+1. **Version and notes.** Add a `## <version>` section to the top of `CHANGELOG.md` and put the same
+   version in `VERSION`. The GitHub release notes come from that section
+   (`scripts/release-notes.py`), followed by the README's requirements and limitations.
+2. **Commit and push** to `main`, so the tag points at what was built:
+
+   ```sh
+   git commit -am "chore(release): prepare <version>" && git push origin main
+   ```
+
+3. **Build, sign, notarize, staple and package.** Start from a clean `build/`, and raise
+   `ODH_BUILD_NUMBER` with every release (it becomes `CFBundleVersion`):
+
+   ```sh
+   rm -rf build
+   ODH_SIGNING_IDENTITY="Developer ID Application: <Name> (<TEAMID>)" \
+   ODH_ASC_KEY_ID=<key id> ODH_ASC_ISSUER_ID=<issuer id> ODH_ASC_KEY_PATH=<path to .p8> \
+   ODH_BUILD_NUMBER=<n> scripts/sign-and-notarize.sh
+   ```
+
+   Run `swift test --package-path engine` first; the script does not. It builds the release app, signs
+   inside out, notarizes and staples the app, packages the DMG,
+   notarizes and staples the DMG, copies it to the fixed name, writes `SHA256SUMS`, and ends by
+   printing what Gatekeeper and `stapler validate` make of both. Both notarizations must say
+   `status: Accepted`; it takes a few minutes. Logs are saved under `build/notarization/`.
+
+4. **Check the artifacts** before publishing:
+
+   ```sh
+   cat build/SHA256SUMS
+   spctl -a -t open --context context:primary-signature -vv build/StupidSimulator-<version>.dmg
+   hdiutil attach -nobrowse -readonly build/StupidSimulator-<version>.dmg
+   #   check "/Volumes/.../stupid simulator.app": the Info.plist version, and that
+   #   Contents/MacOS/stupidsim --version prints <version>, then detach it
+   ```
+
+5. **Publish.** Tag, push the tag, and create the release with both DMGs and the checksums:
+
+   ```sh
+   python3 scripts/release-notes.py <version> > build/release-notes.md
+   git tag -a v<version> -m "stupid simulator <version>" && git push origin v<version>
+   gh release create v<version> --repo stephancill/stupid-simulator \
+     --title "stupid simulator <version>" --notes-file build/release-notes.md \
+     build/StupidSimulator-<version>.dmg build/StupidSimulator.dmg build/SHA256SUMS
+   ```
+
+   The README's download button fetches `StupidSimulator.dmg` from the latest release, so it needs
+   no edit.
+
+6. **Verify the download** the way a user gets it:
+
+   ```sh
+   curl -sSL -o /tmp/s.dmg https://github.com/stephancill/stupid-simulator/releases/latest/download/StupidSimulator.dmg
+   shasum -a 256 /tmp/s.dmg    # must match SHA256SUMS
+   spctl -a -t open --context context:primary-signature /tmp/s.dmg
+   ```
+
+7. **Install it** by copying `stupid simulator.app` from the DMG to `/Applications`, quitting any
+   running copy first. The CLI link that **Install Command Line Tool** made keeps pointing at the new
+   bundle.
+
+## The order that matters
+
+- **Sign inside out.** Sparkle's nested XPC services, then `Autoupdate`, then `Updater.app`, then
+  the framework, then the bundled command, then the app. `--deep` is for verification only, never for
+  signing. `scripts/sign-app.sh` does this.
+- **Staple the app before packaging.** The copy someone drags to Applications then carries its own
+  ticket and passes Gatekeeper offline. The DMG is notarized and stapled separately.
+- **Checksums last.** `scripts/checksums.sh` refuses DMGs that are not stapled, because stapling
+  changes the bytes.
+- **Sign the update last**, once updates are on: the feed signature covers the exact bytes people
+  download, so `scripts/appcast.sh` runs after everything else and refuses an unstapled artifact.
+
+## Reading a notarization log
+
+The log is saved for every submission under `build/notarization/`, including accepted ones.
+`notarytool submit` reports `Accepted`, `Invalid` or `Rejected`; for anything but `Accepted`, the log
+is the only thing that says why.
+
+```sh
+xcrun notarytool log <submission-id> --key <p8> --key-id <key-id> --issuer <issuer-id>
+```
+
+`issues` is the part that matters; each entry names a `path`, a `severity` and a `message`:
+
+| Message | What it means |
+|---|---|
+| `The signature of the binary is invalid` | Something was modified after signing, or signed in the wrong order. |
+| `The executable does not have the hardened runtime enabled` | A nested binary was missed. Check each one on its own, not with `--deep`. |
+| `The signature does not include a secure timestamp` | Signed without `--timestamp`, usually offline. |
+| `The binary is not signed with a valid Developer ID certificate` | An Apple Development identity was used. |
+
+`status: Accepted` with a non-empty `issues` list is worth reading: those are warnings that become
+failures in a later macOS.
+
+## When a release fails midway
+
+- **Before `gh release create`**, nothing outside this machine has changed. Fix it and run step 3
+  again from a clean `build/`.
+- **The tag or release exists but the artifacts are wrong**, and nobody can have downloaded it yet:
+  delete both and publish again.
+
+  ```sh
+  gh release delete v<version> --yes --repo stephancill/stupid-simulator
+  git push --delete origin v<version> && git tag -d v<version>
+  ```
+
+- **Notarization is stuck in progress.** It can take minutes or hours; `notarytool history` shows
+  where it is. Do not resubmit the same bytes.
+- **A published version is broken.** Release a fixed version instead of reusing the number. Mark the
+  bad one as a pre-release, or delete it, so nobody new downloads it.
+
+## Releasing from GitHub Actions
+
+`.github/workflows/release.yml` (manual, with a `publish` input for a dry run) wraps the same scripts.
+It needs these repository secrets, none of which are set yet:
 
 | Secret | Contents |
 |---|---|
@@ -41,114 +156,9 @@ already has. Keep it in a password manager as well as in the repository secret.
 | `ASC_KEY_ID` | App Store Connect key ID |
 | `ASC_ISSUER_ID` | App Store Connect issuer ID |
 | `ASC_KEY_P8` | the contents of the `.p8` private key |
-| `SPARKLE_PRIVATE_KEY` | the update signing private key |
+| `SPARKLE_PRIVATE_KEY` | the update signing private key, once updates are on |
 
-A missing secret fails the run loudly on its first step. Signing is never skipped quietly, because an
-unsigned build that reaches a release page is worse than a run that stops.
-
-## Making a release
-
-1. Add the version's section to `CHANGELOG.md`. The release notes on GitHub and the notes inside the
-   update feed both come from it, so they cannot drift apart.
-2. Update `VERSION`.
-3. Run the **Release** workflow from the Actions tab with `publish` left **false**. That is a dry
-   run: it builds, signs, notarizes, staples, packages, checksums and generates the feed, and
-   creates no tag, no release and no commit anywhere. The artifacts are attached to the run under a
-   short retention name so you can download and check them.
-4. Install the dry run's DMG and use it. `stapler validate` on the app and on the DMG, and
-   `shasum -c SHA256SUMS` from a different directory.
-5. Run the workflow again with `publish` **true**. It creates the tag and a release marked as the
-   latest, carrying the DMG under its versioned name, the same DMG as `stupid simulator.dmg`,
-   `SHA256SUMS` and the signed `appcast.xml`. The README's download button and its Install link fetch
-   `stupid simulator.dmg` from the latest release, so they need no edit.
-6. **Only once that release page exists**, commit the release's `appcast.xml` to the feed
-   repository. Installed copies read the feed from there, never from the release, which is why the
-   feed URL can never move. A feed pointing at a download that is not there yet breaks updates for
-   everyone who reads it in the meantime.
-7. Confirm an already installed older copy finds the update, verifies it and installs it, ending on
-   the new version. Do this before announcing anything: a broken updater cannot be fixed by a later
-   release.
-
-Everything the workflow runs is a script in `scripts/`, and each one works on its own from a
-terminal. The workflow wraps them; it does not reimplement them.
-
-### The order that matters
-
-Two steps fail silently if they are done in the wrong order, and both are wired that way on purpose:
-
-- **Sign inside out.** Sparkle's nested XPC services, then `Autoupdate`, then `Updater.app`, then the
-  framework, then the bundled command, then the app. `--deep` is for verification only, never for
-  signing.
-- **Sign the update last.** The feed signature covers the exact bytes of the file people download, so
-  it is taken after notarizing, stapling and packaging. Anything that rewrites the artifact
-  afterwards leaves a signature that no longer matches, and Sparkle then refuses the update without
-  telling anyone. `scripts/appcast.sh` refuses to sign an artifact that is not stapled, and checks
-  the byte length it writes against the file on disk.
-
-## Reading a notarization log
-
-The log is fetched and saved on every submission, including successful ones, under
-`build/notarization/`. `notarytool submit` reports `Accepted`, `Invalid` or `Rejected`; for anything
-but `Accepted`, the log is the only thing that says why.
-
-```sh
-xcrun notarytool log <submission-id> \
-  --key <p8> --key-id <key-id> --issuer <issuer-id>
-```
-
-It is JSON. `issues` is the part that matters, and each entry names a `path` inside the bundle, a
-`severity` and a `message`. The usual ones:
-
-| Message | What it means |
-|---|---|
-| `The signature of the binary is invalid` | Something was modified after signing, or signed in the wrong order. |
-| `The executable does not have the hardened runtime enabled` | A nested binary was missed. Check each one on its own, not with `--deep`. |
-| `The signature does not include a secure timestamp` | Signed without `--timestamp`, usually offline. |
-| `The binary is not signed with a valid Developer ID certificate` | An Apple Development identity was used. |
-
-`status: Accepted` with a non-empty `issues` list is possible and is worth reading: those are
-warnings that become failures in a later macOS.
-
-## When a release fails midway
-
-Nothing before the publish step changes anything outside the runner, so a failure there costs
-nothing: fix it and run the dry run again.
-
-After that, work backwards from how far it got.
-
-**The tag and release exist, but the artifacts are wrong.** Delete the release and the tag, then run
-again. Do this only if nobody can have downloaded it yet, and never once the feed points at it.
-
-```sh
-gh release delete v<version> --yes
-git push --delete origin v<version>
-```
-
-**The release is published and the feed is not updated yet.** Nothing is broken. Either finish by
-committing the feed, or leave it: people who downloaded the DMG have a working app, and no installed
-copy is looking for that version.
-
-**The feed points at a release that is wrong or gone.** This is the one that hurts, because installed
-copies are reading it. Revert the feed repository to its previous commit first, which stops the
-damage, then fix the release. Do not delete the release while the feed still points at it.
-
-**Notarization is stuck in progress.** Submissions can take minutes or hours. `notarytool history`
-shows where it is. Do not resubmit: a second submission of the same bytes gets a second ticket and
-tells you nothing new.
-
-**The published version is broken for everyone.** Release a fixed version rather than trying to undo
-one. Mark the bad release as a pre-release or delete it so nobody new downloads it, publish the fix,
-and update the feed. Installed copies will update themselves. Never reuse a version number: Sparkle
-compares build numbers, and a copy that has already seen that number will not offer it again.
-
-## The runner
-
-The release runs on a pinned runner image and asks for a preferred Xcode major, falling back to the
-newest installed Xcode with a macOS SDK of 26.0 or newer. Both are workflow inputs, so a runner image
-that changes or is withdrawn can be worked around by dispatching with a different one rather than
-editing a file under time pressure.
-
-The SDK floor is the real requirement. The linked SDK decides whether AppKit gives the app its
-current appearance or its pre macOS 26 one, and an older SDK builds, signs and notarizes perfectly
-while shipping a window that looks years out of date. Every run prints each Xcode on the runner with
-its SDK version and records the one it chose, so what shipped is never a matter of inference.
+The workflow currently also imports a Sparkle key and generates a feed, so it needs adjusting before
+it can release this fork while updates are off. It runs on a pinned runner image and asks for a
+preferred Xcode major, falling back to the newest Xcode with a macOS 26.0 SDK or newer: the linked SDK
+decides whether AppKit draws the current window appearance.

@@ -38,12 +38,8 @@ in `skills/stupid-simulator/THIRD_PARTY.md`) and a Vision OCR skill.
 
 ## Releases
 
-Releases are cut locally with `scripts/sign-and-notarize.sh`, then published with `gh release
-create`, following the same steps as `.github/workflows/release.yml` (which needs repository secrets
-this fork has not set up). Signing uses a Developer ID Application identity from the login keychain;
-notarization uses an App Store Connect team API key passed through `ODH_ASC_KEY_ID`,
-`ODH_ASC_ISSUER_ID` and `ODH_ASC_KEY_PATH`. The update feed step is skipped while the app carries no
-`SUFeedURL`. `create-dmg` 8.1.0 is required on `PATH`.
+Releases are cut locally; the full procedure is in [RELEASING.md](../RELEASING.md).
+`sign-and-notarize.sh` skips the update feed step while the app carries no `SUFeedURL`.
 
 ## Rebrand
 

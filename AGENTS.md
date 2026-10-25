@@ -15,6 +15,12 @@ and agents.
   upstream commits still cherry-pick cleanly. Branding lives in `Brand.swift`, `packaging/` and the
   scripts.
 
+## Releasing
+
+- Follow [RELEASING.md](RELEASING.md) for every release: version and changelog, the local sign,
+  notarize and package run, the checks before publishing, `gh release create`, and verifying the
+  download. Ask before publishing a release; it is public.
+
 ## Before committing
 
 - Update [docs/implementation-notes.md](docs/implementation-notes.md) with any change to behaviour,
