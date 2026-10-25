@@ -3,6 +3,31 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## Agent skill
+
+`skills/stupid-simulator/` is the agent skill for this CLI. It replaces two earlier local skills:
+an IDB based simulator skill (adapted from Conor Luddy's MIT-licensed ios-simulator-skill, credited
+in `skills/stupid-simulator/THIRD_PARTY.md`) and a Vision OCR skill.
+
+- The accessibility tree comes from `stupidsim ui-tree --json`, converted in
+  `scripts/common/tree_utils.py` to the element shape the audit, capture and recorder scripts
+  expect. The scripts that only wrapped IDB input, and the clipboard script (which `simctl pbcopy`
+  under Device Hub silently defeats), were dropped in favour of `stupidsim` commands.
+- The audit skips its traits and hint rules when the tree does not report those fields, instead of
+  flagging every element.
+- `app_state_capture.py` matched the first line containing "iPhone" or "iPad" in `simctl list`,
+  so it reported the wrong device; it now matches the UDID in `simctl list -j`. The health check
+  counted booted devices the same way and missed custom names.
+- OCR: `--normalized` prints the 0 to 1 coordinates `tap` takes. `--dual` was removed: the scale
+  only divides coordinates, so the second pass recognized the same text and printed it in pixels.
+  The fast recognizer is the default because Vision's accurate recognizer fails on macOS 27
+  (Darwin 27.0) with `e5rtError 13` on every compute device; a failed request is now an error
+  rather than an empty result. Normalized output forces the C locale, which otherwise printed
+  `0,254`.
+- A device whose input had stopped working was seen a second time on Xcode 27 (an iPhone 17 on
+  iOS 27.0, about an hour after a reboot, with Device Hub and this app attached). Quitting this app
+  did not bring input back; rebooting the device did.
+
 ## Releases
 
 Releases are cut locally with `scripts/sign-and-notarize.sh`, then published with `gh release

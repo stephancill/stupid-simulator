@@ -57,6 +57,14 @@ again.
 Then, in a new terminal, `stupidsim doctor` reports what it found and `stupidsim list` shows your
 simulators.
 
+## For agents
+
+[`skills/stupid-simulator`](skills/stupid-simulator/SKILL.md) is a skill for coding agents (Claude
+Code, Codex, OpenCode and others that read `SKILL.md`): the read, act and verify loop with
+`stupidsim`, what goes wrong on Xcode 27 and how to recover, OCR for web content the accessibility
+tree misses, and scripts for simulator lifecycle, permissions, push, location, logs, hangs and
+audits. Link or copy the folder into your agent's skills directory.
+
 ## Features
 
 - **A window per device**: several simulators side by side, resizable from any edge or corner, full

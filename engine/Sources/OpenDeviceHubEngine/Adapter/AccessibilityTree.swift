@@ -62,8 +62,9 @@ final class AccessibilityTreeReader: @unchecked Sendable {
         defer { translator.setBridgeTokenDelegate(nil) }
 
         guard let translation = translator.frontmostApplication(withDisplayId: 0, bridgeDelegateToken: token) else {
-            throw EngineError.capabilityUnavailable(
-                name: "the accessibility tree, no app answered and the guest may still be starting"
+            throw EngineError.privateCall(
+                symbol: "-[AXPTranslator frontmostApplicationWithDisplayId:bridgeDelegateToken:]",
+                message: "no app answered. The device may still be starting, or locked with nothing in front"
             )
         }
         try Self.setToken(token, on: translation)
