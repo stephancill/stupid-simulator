@@ -3,6 +3,10 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.3.1
+
+- A bolder app icon that stays legible at small sizes.
+
 ## 0.3.0
 
 The first release of stupid simulator, a fork of OpenDeviceHub 0.2.0.
