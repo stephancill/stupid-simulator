@@ -9,7 +9,7 @@ struct Type: AsyncParsableCommand {
         discussion: "Characters are typed as on a US keyboard, holding Shift for capitals and symbols."
     )
 
-    @Argument(help: "The UDID of the simulator to type on.")
+    @Argument(help: ArgumentHelp(stringLiteral: DeviceArgument.help), transform: DeviceArgument.resolve)
     var udid: String
 
     @Argument(help: "The text to type.")
@@ -18,7 +18,13 @@ struct Type: AsyncParsableCommand {
     @Option(help: "Milliseconds between key presses.")
     var keyMilliseconds: Int = 25
 
+    @OptionGroup var verification: Verification
+
     func run() async throws {
+        try await verification.check(udid) { try await send() }
+    }
+
+    private func send() async throws {
         guard let keys = KeyboardMap.keys(forTyping: text) else {
             throw ValidationError("That text contains a character with no key on a US keyboard.")
         }

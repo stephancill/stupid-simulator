@@ -137,6 +137,27 @@ extension SimctlService {
 }
 
 extension SimctlService {
+    static func screenshotArguments(udid: String, file: URL) -> [String] {
+        ["simctl", "io", udid, "screenshot", "--type=png", file.path]
+    }
+
+    /// Writes the device's main display to `file` as a PNG.
+    public func screenshot(udid: String, to file: URL) throws {
+        try runSimctl(Self.screenshotArguments(udid: udid, file: file))
+    }
+
+    /// The device's main display as PNG data, through a temporary file because `simctl` writes a
+    /// file named `-` rather than to standard output.
+    public func screenshot(udid: String) throws -> Data {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(Brand.identifierPrefix)-\(UUID().uuidString).png")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try screenshot(udid: udid, to: file)
+        return try Data(contentsOf: file)
+    }
+}
+
+extension SimctlService {
     public enum Appearance: String, Sendable, CaseIterable {
         case light
         case dark

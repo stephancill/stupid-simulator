@@ -19,10 +19,20 @@ struct List: ParsableCommand {
     @Flag(help: "Include devices whose runtime is not installed.")
     var all = false
 
+    @Flag(help: "Print the devices as JSON.")
+    var json = false
+
     func run() throws {
         let devices = try read()
             .filter { all || $0.isAvailable }
             .sorted { ($0.runtimeName, $0.name) < ($1.runtimeName, $1.name) }
+
+        if json {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            print(String(decoding: try encoder.encode(devices), as: UTF8.self))
+            return
+        }
 
         guard !devices.isEmpty else {
             print("No simulators.\(all ? "" : " Pass --all to include unavailable runtimes.")")

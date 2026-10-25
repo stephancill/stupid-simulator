@@ -9,7 +9,7 @@ struct Pinch: AsyncParsableCommand {
         abstract: "Pinch two contacts together or apart on a booted simulator."
     )
 
-    @Argument(help: "The UDID of the simulator to pinch on.")
+    @Argument(help: ArgumentHelp(stringLiteral: DeviceArgument.help), transform: DeviceArgument.resolve)
     var udid: String
 
     @Option(help: "Centre of the gesture, horizontally, 0 to 1.")
@@ -37,7 +37,13 @@ struct Pinch: AsyncParsableCommand {
         guard steps >= 1 else { throw ValidationError("--steps must be at least 1.") }
     }
 
+    @OptionGroup var verification: Verification
+
     func run() async throws {
+        try await verification.check(udid) { try await send() }
+    }
+
+    private func send() async throws {
         let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
         let session = try adapter.openInput(udid)
         defer { session.close() }

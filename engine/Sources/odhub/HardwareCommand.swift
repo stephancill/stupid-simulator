@@ -22,7 +22,7 @@ struct Button: AsyncParsableCommand {
         }
     }
 
-    @Argument(help: "The UDID of the simulator.")
+    @Argument(help: ArgumentHelp(stringLiteral: DeviceArgument.help), transform: DeviceArgument.resolve)
     var udid: String
 
     @Argument(help: "Which button: home, lock, volume-up, volume-down or siri.")
@@ -31,7 +31,13 @@ struct Button: AsyncParsableCommand {
     @Option(help: "Milliseconds to hold the button down.")
     var holdMilliseconds: Int = 15
 
+    @OptionGroup var verification: Verification
+
     func run() async throws {
+        try await verification.check(udid) { try await press() }
+    }
+
+    private func press() async throws {
         let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
         let session = try adapter.openInput(udid)
         defer { session.close() }
@@ -43,19 +49,25 @@ struct Button: AsyncParsableCommand {
     }
 }
 
-struct Rotate: ParsableCommand {
+struct Rotate: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "rotate",
         abstract: "Turn a booted simulator to an orientation."
     )
 
-    @Argument(help: "The UDID of the simulator.")
+    @Argument(help: ArgumentHelp(stringLiteral: DeviceArgument.help), transform: DeviceArgument.resolve)
     var udid: String
 
     @Argument(help: "portrait, portraitUpsideDown, landscapeLeft or landscapeRight.")
     var orientation: String
 
-    func run() throws {
+    @OptionGroup var verification: Verification
+
+    func run() async throws {
+        try await verification.check(udid) { try turn() }
+    }
+
+    private func turn() throws {
         guard let value = DeviceOrientation(rawValue: orientation) else {
             throw ValidationError("Unknown orientation. Use one of: \(DeviceOrientation.allCases.map(\.rawValue).joined(separator: ", ")).")
         }

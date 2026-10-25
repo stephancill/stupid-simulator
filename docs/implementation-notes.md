@@ -3,6 +3,26 @@
 What Stupid Simulator changes relative to upstream OpenDeviceHub (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## Agent oriented CLI
+
+- Every command that takes a UDID also takes `booted`, meaning the one booted simulator. With none
+  or several booted it refuses and names them, rather than picking one.
+- `screenshot <udid> [-o file]` writes the main display as a PNG through `simctl io screenshot` and
+  prints the absolute path. (`simctl` writes a file literally named `-` when given `-`, so it cannot
+  write to standard output.)
+- `list --json` prints the devices as JSON.
+- `--verify` on `tap`, `swipe`, `pinch`, `type`, `button`, `rotate`, `home-swipe` and
+  `app-switcher`: CoreSimulator accepts an input message whether or not the guest acts on it, so
+  the command's own success says nothing. With `--verify` it takes three screenshots before the
+  input (about a second apart in total, so a blinking cursor is caught on and off), masks the pixels
+  that changed among them, sends the input, then polls screenshots until at least 16 pixels outside
+  the mask differ from the last baseline frame, or `--verify-timeout` (3 s) passes. Exit 0 prints the
+  changed pixel count and bounding box, exit 2 means nothing changed, exit 3 means the screen was
+  too busy (a quarter of the pixels changing, or the screen turning) to tell.
+- Limits of `--verify`: it detects any change, not the intended one. Content still loading on its
+  own (search suggestions arriving after a keystroke) can pass a no-op input, and the status bar
+  clock ticking over during the wait would too.
+
 ## Accessibility tree (upstream PR #88)
 
 Merged `odhub ui-tree` from upstream PR #88 (unmerged upstream at the time of the fork). It reads the
@@ -23,7 +43,6 @@ its own". Observed on Xcode 27 (27A266a):
   no state at all.
 - iOS 26.3 runtimes write no `uniqueId`; each display only has a `deviceName` (`PurpleMain`,
   `PurpleTVOut`, ...).
-
 - A freshly booted iOS 26.3 device reports the device wide backlight as `off` while its screen is
   lit (`devicectl device info displays` says the same).
 
@@ -59,5 +78,4 @@ state are still refused.
   `IndigoHIDMessageForMouseNSEvent` path under Xcode 27. (Baguette's IOHIDEvent digitizer path was
   tried and was not needed.)
 - `button home` and `button lock` did nothing on iOS 27.0 in testing, while `home-swipe` worked.
-- Input commands report success when CoreSimulator accepts the message, which says nothing about
-  whether the guest acted on it.
+- Input commands without `--verify` still report success when CoreSimulator accepts the message.

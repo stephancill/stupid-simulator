@@ -9,7 +9,7 @@ struct Tap: AsyncParsableCommand {
         abstract: "Send a single tap to a booted simulator at a normalized coordinate."
     )
 
-    @Argument(help: "The UDID of the simulator to tap.")
+    @Argument(help: ArgumentHelp(stringLiteral: DeviceArgument.help), transform: DeviceArgument.resolve)
     var udid: String
 
     @Option(help: "Horizontal position, 0 at the left edge and 1 at the right.")
@@ -30,7 +30,13 @@ struct Tap: AsyncParsableCommand {
         }
     }
 
+    @OptionGroup var verification: Verification
+
     func run() async throws {
+        try await verification.check(udid) { try await send() }
+    }
+
+    private func send() async throws {
         let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
         let session = try adapter.openInput(udid)
         defer { session.close() }

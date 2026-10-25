@@ -14,7 +14,7 @@ struct UITree: AsyncParsableCommand {
             """
     )
 
-    @Argument(help: "The UDID of the simulator.")
+    @Argument(help: ArgumentHelp(stringLiteral: DeviceArgument.help), transform: DeviceArgument.resolve)
     var udid: String
 
     @Flag(help: "Print the whole tree as JSON, frames in points.")

@@ -8,7 +8,7 @@ struct View: AsyncParsableCommand {
         abstract: "Open a window showing each simulator's screen."
     )
 
-    @Argument(help: "The UDIDs of the simulators to show, one window each.")
+    @Argument(help: "The UDIDs of the simulators to show, one window each, or `booted`.", transform: DeviceArgument.resolve)
     var udids: [String]
 
     @Flag(help: "Boot the simulator first if it is not already booted.")

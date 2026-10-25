@@ -8,7 +8,7 @@ struct Paste: ParsableCommand {
         abstract: "Put text on a simulator's pasteboard, reading standard input when no text is given."
     )
 
-    @Argument(help: "The UDID of the simulator.")
+    @Argument(help: ArgumentHelp(stringLiteral: DeviceArgument.help), transform: DeviceArgument.resolve)
     var udid: String
 
     @Argument(help: "The text to place. Standard input is used when this is omitted.")
@@ -33,7 +33,7 @@ struct Copy: ParsableCommand {
         abstract: "Print a simulator's pasteboard contents."
     )
 
-    @Argument(help: "The UDID of the simulator.")
+    @Argument(help: ArgumentHelp(stringLiteral: DeviceArgument.help), transform: DeviceArgument.resolve)
     var udid: String
 
     func run() throws {

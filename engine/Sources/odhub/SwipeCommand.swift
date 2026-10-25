@@ -9,7 +9,7 @@ struct Swipe: AsyncParsableCommand {
         abstract: "Drag one finger across a booted simulator between normalized coordinates."
     )
 
-    @Argument(help: "The UDID of the simulator to swipe on.")
+    @Argument(help: ArgumentHelp(stringLiteral: DeviceArgument.help), transform: DeviceArgument.resolve)
     var udid: String
 
     @Option(help: "Where the drag starts, horizontally, 0 to 1.")
@@ -38,7 +38,13 @@ struct Swipe: AsyncParsableCommand {
         guard stepMilliseconds >= 0 else { throw ValidationError("--step-milliseconds cannot be negative.") }
     }
 
+    @OptionGroup var verification: Verification
+
     func run() async throws {
+        try await verification.check(udid) { try await send() }
+    }
+
+    private func send() async throws {
         let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
         let session = try adapter.openInput(udid)
         defer { session.close() }
