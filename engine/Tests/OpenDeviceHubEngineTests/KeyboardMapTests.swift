@@ -44,20 +44,50 @@ final class KeyboardMapTests: XCTestCase {
     }
 
     func testTypingASimpleString() throws {
-        let usages = try XCTUnwrap(KeyboardMap.usages(forTyping: "abc 12"))
-        XCTAssertEqual(usages, [0x04, 0x05, 0x06, 0x2C, 0x1E, 0x1F])
+        let keys = try XCTUnwrap(KeyboardMap.keys(forTyping: "abc 12"))
+        XCTAssertEqual(keys.map(\.usage), [0x04, 0x05, 0x06, 0x2C, 0x1E, 0x1F])
+        XCTAssertFalse(keys.contains(where: \.shifted))
     }
 
-    func testTypingIsCaseInsensitiveBecauseThereIsNoShiftYet() {
-        XCTAssertEqual(KeyboardMap.usages(forTyping: "ABC"), KeyboardMap.usages(forTyping: "abc"))
+    func testCapitalsAreTheirLetterWithShift() throws {
+        let keys = try XCTUnwrap(KeyboardMap.keys(forTyping: "aZ"))
+        XCTAssertEqual(keys, [
+            KeyboardMap.TypedKey(usage: 0x04, shifted: false),
+            KeyboardMap.TypedKey(usage: 0x1D, shifted: true),
+        ])
     }
 
-    func testTypingRefusesCharactersWithNoUnshiftedKey() {
-        XCTAssertNil(KeyboardMap.usages(forTyping: "hello!"))
-        XCTAssertNil(KeyboardMap.usages(forTyping: "caf\u{e9}"))
+    func testSymbolsAreTheUpperCharacterOfTheirKey() throws {
+        let keys = try XCTUnwrap(KeyboardMap.keys(forTyping: "a@b.com #1!"))
+        XCTAssertEqual(keys.map(\.usage), [0x04, 0x1F, 0x05, 0x37, 0x06, 0x12, 0x10, 0x2C, 0x20, 0x1E, 0x1E])
+        XCTAssertEqual(keys.map(\.shifted), [false, true, false, false, false, false, false, false, true, false, true])
+    }
+
+    func testEveryShiftedCharacterSharesAKeyWithAnUnshiftedOne() {
+        let unshifted = Set(KeyboardMap.usageByCharacter.values)
+        for (character, usage) in KeyboardMap.shiftedUsageByCharacter {
+            XCTAssertTrue(unshifted.contains(usage), "\(character) has a key nothing unshifted uses")
+        }
+        XCTAssertEqual(KeyboardMap.shiftedUsageByCharacter.count, 47, "26 capitals and 21 symbols")
+    }
+
+    func testTypingRefusesCharactersWithNoKey() {
+        XCTAssertNil(KeyboardMap.keys(forTyping: "caf\u{e9}"))
+        XCTAssertNil(KeyboardMap.keys(forTyping: "\u{1F600}"))
     }
 
     func testTypingAnEmptyStringProducesNoKeys() {
-        XCTAssertEqual(KeyboardMap.usages(forTyping: ""), [])
+        XCTAssertEqual(KeyboardMap.keys(forTyping: ""), [])
+    }
+
+    func testModifiersReadWhetherThatKeyIsDownFromItsOwnFlag() throws {
+        // Left Shift pressed: the device flag 0x02 is set alongside the generic Shift flag.
+        let down = try XCTUnwrap(KeyboardMap.modifier(forVirtualKeyCode: 0x38, flags: 0x20102))
+        XCTAssertEqual(down.usage, 0xE1)
+        XCTAssertTrue(down.isDown)
+        // Left Shift released while right Shift is still held: Shift stays set, 0x02 does not.
+        let up = try XCTUnwrap(KeyboardMap.modifier(forVirtualKeyCode: 0x38, flags: 0x20104))
+        XCTAssertFalse(up.isDown)
+        XCTAssertNil(KeyboardMap.modifier(forVirtualKeyCode: 0x37, flags: 0x100108), "Command stays with the Mac")
     }
 }

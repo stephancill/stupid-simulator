@@ -158,6 +158,17 @@ public final class DeviceScreenView: MTKView, NSDraggingSource {
         onKey?(usage, false)
     }
 
+    public override func flagsChanged(with event: NSEvent) {
+        guard sendsKeyboardInput,
+              let modifier = KeyboardMap.modifier(
+                  forVirtualKeyCode: event.keyCode, flags: event.modifierFlags.rawValue
+              ) else {
+            super.flagsChanged(with: event)
+            return
+        }
+        onKey?(modifier.usage, modifier.isDown)
+    }
+
     public override func mouseDown(with event: NSEvent) {
         onContact?(contactPoint(for: event), .began, style(for: event))
     }

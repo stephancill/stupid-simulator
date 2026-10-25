@@ -23,16 +23,52 @@ public enum KeyboardMap {
         usageByVirtualKeyCode[keyCode]
     }
 
-    /// Usage codes for a literal string, so text can be typed without a virtual key code. Only the
-    /// characters with an unshifted key are covered; anything else returns nil rather than typing
-    /// something different.
-    public static func usages(forTyping text: String) -> [UInt32]? {
-        var usages: [UInt32] = []
-        for character in text.lowercased() {
-            guard let usage = usageByCharacter[character] else { return nil }
-            usages.append(usage)
+    /// The modifier keys, which macOS reports through `flagsChanged` rather than as key presses.
+    /// Each carries the device dependent flag that says whether that one key, not its twin on the
+    /// other side, is down. Command is left out: the Mac's menus own it.
+    public static let modifierByVirtualKeyCode: [UInt16: (usage: UInt32, deviceFlag: UInt)] = [
+        0x38: (0xE1, 0x02), // left Shift
+        0x3C: (0xE5, 0x04), // right Shift
+        0x3B: (0xE0, 0x01), // left Control
+        0x3E: (0xE4, 0x2000), // right Control
+        0x3A: (0xE2, 0x20), // left Option
+        0x3D: (0xE6, 0x40), // right Option
+    ]
+
+    /// The usage and whether it is now down, for a `flagsChanged` event's key code and raw flags.
+    public static func modifier(forVirtualKeyCode keyCode: UInt16, flags: UInt) -> (usage: UInt32, isDown: Bool)? {
+        guard let modifier = modifierByVirtualKeyCode[keyCode] else { return nil }
+        return (modifier.usage, flags & modifier.deviceFlag != 0)
+    }
+
+    public static let leftShiftUsage: UInt32 = 0xE1
+
+    /// One key to press for a character, with Shift held for the key's upper character.
+    public struct TypedKey: Sendable, Hashable {
+        public let usage: UInt32
+        public let shifted: Bool
+
+        public init(usage: UInt32, shifted: Bool) {
+            self.usage = usage
+            self.shifted = shifted
         }
-        return usages
+    }
+
+    /// The keys for a literal string on a US layout, so text can be typed without a virtual key
+    /// code. A character with no key, such as an accented letter, returns nil rather than typing
+    /// something different.
+    public static func keys(forTyping text: String) -> [TypedKey]? {
+        var keys: [TypedKey] = []
+        for character in text {
+            if let usage = usageByCharacter[character] {
+                keys.append(TypedKey(usage: usage, shifted: false))
+            } else if let usage = shiftedUsageByCharacter[character] {
+                keys.append(TypedKey(usage: usage, shifted: true))
+            } else {
+                return nil
+            }
+        }
+        return keys
     }
 
     static let usageByCharacter: [Character: UInt32] = {
@@ -58,6 +94,30 @@ public enum KeyboardMap {
         map[","] = 0x36
         map["."] = 0x37
         map["/"] = 0x38
+        return map
+    }()
+
+    /// The upper character of each key on a US layout.
+    static let shiftedUsageByCharacter: [Character: UInt32] = {
+        var map: [Character: UInt32] = [:]
+        for (index, letter) in "ABCDEFGHIJKLMNOPQRSTUVWXYZ".enumerated() {
+            map[letter] = UInt32(0x04 + index)
+        }
+        for (index, symbol) in "!@#$%^&*(".enumerated() {
+            map[symbol] = UInt32(0x1E + index)
+        }
+        map[")"] = 0x27
+        map["_"] = 0x2D
+        map["+"] = 0x2E
+        map["{"] = 0x2F
+        map["}"] = 0x30
+        map["|"] = 0x31
+        map[":"] = 0x33
+        map["\""] = 0x34
+        map["~"] = 0x35
+        map["<"] = 0x36
+        map[">"] = 0x37
+        map["?"] = 0x38
         return map
     }()
 }

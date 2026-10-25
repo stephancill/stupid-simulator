@@ -91,14 +91,6 @@ enum IndigoHID {
     /// Verified on Xcode 26.5 (17F42) and Xcode 27 (27A266a).
     static let mouseBuilderSymbol = "IndigoHIDMessageForMouseNSEvent"
 
-    /// `IndigoHIDMessageForKeyboardArbitrary(usage, isDown)` returns a complete 192 byte message
-    /// that is sent unchanged, no envelope needed. Verified on Xcode 26.5 (17F42) and Xcode 27 (27A266a). On 17F42
-    /// `IndigoHIDStringForKeyUsageCode` names 0x04 "A", 0x28 the return arrow and 0x2c "space",
-    /// confirming these are standard USB HID keyboard usages.
-    static let keyboardBuilderSymbol = "IndigoHIDMessageForKeyboardArbitrary"
-
-    typealias KeyboardMessageBuilder = @convention(c) (Int32, Int32) -> UnsafeMutableRawPointer?
-
     /// `IndigoHIDMessageForButton(eventSource, direction, target)`. The argument order matters and
     /// is not the one the name suggests: the target comes last and is always `buttonTarget`, while
     /// the button itself is chosen by the event source. Verified on Xcode 26.5 (17F42) and
@@ -110,6 +102,12 @@ enum IndigoHID {
     /// keys, which travel on the consumer page rather than as buttons.
     static let arbitraryBuilderSymbol = "IndigoHIDMessageForHIDArbitrary"
     static let consumerUsagePage: UInt32 = 0x0c
+
+    /// Keys travel through the same builder on the keyboard page, addressed to the touch target.
+    /// `IndigoHIDMessageForKeyboardArbitrary` builds a message the guest accepts and then ignores
+    /// on Xcode 27 (27A266a), with iOS 27.0 and iOS 26.3 alike; this path types on both. The usages
+    /// are standard USB HID keyboard usages, so 0x04 is "a" and 0xe1 is the left Shift.
+    static let keyboardUsagePage: UInt32 = 0x07
 
     /// Down and up for buttons and consumer usages, which is 1 and 2 rather than the 1 and 0 a
     /// boolean would suggest.

@@ -13,7 +13,6 @@ import OpenDeviceHubPrivate
 final class LegacyHIDInputSession: InputSession, @unchecked Sendable {
     private let client: any ODHSimDeviceLegacyHIDClient
     private let buildMouseMessage: IndigoHID.MouseMessageBuilder
-    private let buildKeyboardMessage: IndigoHID.KeyboardMessageBuilder
     private let buildButtonMessage: IndigoHID.ButtonMessageBuilder
     private let buildArbitraryMessage: IndigoHID.ArbitraryMessageBuilder
     private let queue = DispatchQueue(label: "\(Brand.identifierPrefix).hid")
@@ -28,14 +27,6 @@ final class LegacyHIDInputSession: InputSession, @unchecked Sendable {
             )
         }
         buildMouseMessage = unsafeBitCast(symbol, to: IndigoHID.MouseMessageBuilder.self)
-
-        guard let keyboardSymbol = simulatorKit.symbol(named: IndigoHID.keyboardBuilderSymbol) else {
-            throw EngineError.symbolNotFound(
-                name: IndigoHID.keyboardBuilderSymbol,
-                framework: PrivateFramework.simulatorKit.rawValue
-            )
-        }
-        buildKeyboardMessage = unsafeBitCast(keyboardSymbol, to: IndigoHID.KeyboardMessageBuilder.self)
 
         guard let buttonSymbol = simulatorKit.symbol(named: IndigoHID.buttonBuilderSymbol),
               let arbitrarySymbol = simulatorKit.symbol(named: IndigoHID.arbitraryBuilderSymbol) else {
@@ -167,9 +158,14 @@ final class LegacyHIDInputSession: InputSession, @unchecked Sendable {
 
     func key(_ event: KeyEvent) async throws {
         try ensureOpen()
-        guard let message = buildKeyboardMessage(Int32(event.usage), event.phase == .down ? 1 : 0) else {
+        guard let message = buildArbitraryMessage(
+            Int32(IndigoHID.touchTarget),
+            IndigoHID.keyboardUsagePage,
+            event.usage,
+            event.phase == .down ? IndigoHID.buttonDown : IndigoHID.buttonUp
+        ) else {
             throw EngineError.privateCall(
-                symbol: IndigoHID.keyboardBuilderSymbol,
+                symbol: IndigoHID.arbitraryBuilderSymbol,
                 message: "returned nil for usage \(event.usage)"
             )
         }
