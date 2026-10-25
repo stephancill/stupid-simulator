@@ -22,8 +22,24 @@ struct Paste: ParsableCommand {
             let data = FileHandle.standardInput.readDataToEndOfFile()
             value = String(decoding: data, as: UTF8.self)
         }
-        try SimctlService().pasteboardCopy(value, udid: udid)
+        let simctl = SimctlService()
+        try simctl.pasteboardCopy(value, udid: udid)
+        // Device Hub, and any viewer that keeps the pasteboards in step, writes the Mac's clipboard
+        // over the device's straight away, so what was placed is read back rather than assumed.
+        Thread.sleep(forTimeInterval: 0.25)
+        guard try simctl.pasteboardPaste(udid: udid) == value else {
+            throw PasteboardOverwritten()
+        }
         print("copied \(value.count) characters to the device pasteboard")
+    }
+}
+
+struct PasteboardOverwritten: Error, CustomStringConvertible {
+    var description: String {
+        """
+        The device's pasteboard was overwritten straight after it was set. Device Hub, or a window \
+        that keeps pasteboards in step with the Mac, is probably running.
+        """
     }
 }
 

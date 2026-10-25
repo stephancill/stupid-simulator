@@ -52,6 +52,16 @@ non-integrated display with no state as inactive, and names a display by `device
 backlight is only consulted to choose between a foldable's panels. Two built in screens with no
 state are still refused.
 
+## Pasteboard
+
+`paste` reads the value back a quarter of a second after setting it and fails (exit 1) if it
+changed. While Device Hub is running it writes the Mac's clipboard over every booted device's
+pasteboard straight away, so `simctl pbcopy`, and so `paste`, appeared to work and left the Mac's
+clipboard on the device. A viewer with pasteboard sync on does the same. With neither running,
+round trips of multi line and non ASCII text are exact.
+
+Quitting Device Hub shuts down every simulator it has open, as Simulator.app did.
+
 ## Hardware buttons
 
 `IndigoHIDMessageForButton(eventSource, direction, target)` with upstream's target 0x33 is accepted
@@ -80,7 +90,7 @@ source 0x400002) was not driven: Baguette reports that Siri presses crash `backb
 
 ## Known gaps
 
-- A long lived simulator can stop acting on host input altogether: every message is accepted and
+- A long lived simulator can stop acting on host input altogether (fixed by rebooting it): every message is accepted and
   nothing happens, for touches, keys, rotation and buttons alike. Seen on an iOS 26.3 device that
   had been booted for a long time with OpenDeviceHub and Device Hub both attached; a freshly booted
   iOS 26.3 device took the same taps and typing. So iOS 26 input works through the existing
