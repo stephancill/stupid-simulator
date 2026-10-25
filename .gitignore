@@ -23,3 +23,8 @@ app/.flutter-plugins
 app/.flutter-plugins-dependencies
 app/macos/Flutter/ephemeral/
 app/macos/Pods/
+
+# Reference clones of other projects, never committed.
+third-party/
+
+__pycache__/
