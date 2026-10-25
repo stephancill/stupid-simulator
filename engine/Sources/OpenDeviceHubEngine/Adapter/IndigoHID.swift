@@ -96,7 +96,10 @@ enum IndigoHID {
     /// the button itself is chosen by the event source. Verified on Xcode 26.5 (17F42) and
     /// Xcode 27 (27A266a) by pressing Home and Lock and watching the device respond.
     static let buttonBuilderSymbol = "IndigoHIDMessageForButton"
-    static let buttonTarget: Int32 = 0x33
+    /// Upstream sent 0x33 here. On Xcode 27 (27A266a), with iOS 27.0 and iOS 26.3 phones, a Home or
+    /// Lock addressed to 0x33 is accepted and ignored; addressed to the touch target, 0x32, Home goes
+    /// home and Lock locks, every time.
+    static let buttonTarget = Int32(touchTarget)
 
     /// `IndigoHIDMessageForHIDArbitrary(target, usagePage, usage, direction)`, used for the volume
     /// keys, which travel on the consumer page rather than as buttons.

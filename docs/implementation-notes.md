@@ -52,6 +52,15 @@ non-integrated display with no state as inactive, and names a display by `device
 backlight is only consulted to choose between a foldable's panels. Two built in screens with no
 state are still refused.
 
+## Hardware buttons
+
+`IndigoHIDMessageForButton(eventSource, direction, target)` with upstream's target 0x33 is accepted
+and ignored on Xcode 27 (27A266a) with iOS 27.0 and iOS 26.3 phones: `button home` and `button
+lock` did nothing, at any hold. Addressed to the touch target (0x32) the same message goes home and
+locks the device, three times out of three on both runtimes, with the default 15 ms press. Consumer
+usage 0x40 (Menu) on the arbitrary builder also goes home, and is kept in reserve. Siri (event
+source 0x400002) was not driven: Baguette reports that Siri presses crash `backboardd`.
+
 ## Keyboard input
 
 - `IndigoHIDMessageForKeyboardArbitrary(usage, isDown)` builds a message the guest accepts and then
@@ -77,5 +86,4 @@ state are still refused.
   iOS 26.3 device took the same taps and typing. So iOS 26 input works through the existing
   `IndigoHIDMessageForMouseNSEvent` path under Xcode 27. (Baguette's IOHIDEvent digitizer path was
   tried and was not needed.)
-- `button home` and `button lock` did nothing on iOS 27.0 in testing, while `home-swipe` worked.
 - Input commands without `--verify` still report success when CoreSimulator accepts the message.
