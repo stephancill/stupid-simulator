@@ -6,22 +6,24 @@ import XPC
 
 @Suite struct DisplayReportParsingTests {
     private func record(
-        id: String = "A",
+        id: String? = "A",
+        deviceName: String? = nil,
         name: String = "LCD",
         displayID: Int64 = 1,
         active: Bool? = false,
-        backlight: String = "off",
+        backlight: String? = "off",
         width: Double = 1398,
         height: Double = 2034,
         rotation: String = "rot90",
         integrated: Bool = true
     ) -> xpc_object_t {
         let entry = xpc_dictionary_create(nil, nil, 0)
-        xpc_dictionary_set_string(entry, "uniqueId", id)
+        if let id { xpc_dictionary_set_string(entry, "uniqueId", id) }
+        if let deviceName { xpc_dictionary_set_string(entry, "deviceName", deviceName) }
         xpc_dictionary_set_string(entry, "name", name)
         xpc_dictionary_set_int64(entry, "displayId", displayID)
         if let active { xpc_dictionary_set_bool(entry, "active", active) }
-        xpc_dictionary_set_string(entry, "backlightState", backlight)
+        if let backlight { xpc_dictionary_set_string(entry, "backlightState", backlight) }
         xpc_dictionary_set_bool(entry, "primary", displayID == 1)
         xpc_dictionary_set_int64(entry, "pointScale", 3)
         xpc_dictionary_set_string(entry, "currentOrientation", rotation)
@@ -40,9 +42,10 @@ import XPC
         return entry
     }
 
-    private func output(current: Bool = true, _ records: [xpc_object_t]) -> xpc_object_t {
+    private func output(current: Bool = true, backlight: String? = nil, _ records: [xpc_object_t]) -> xpc_object_t {
         let output = xpc_dictionary_create(nil, nil, 0)
         xpc_dictionary_set_bool(output, "current", current)
+        if let backlight { xpc_dictionary_set_string(output, "backlightState", backlight) }
         let displays = xpc_array_create(nil, 0)
         for record in records { xpc_array_append_value(displays, record) }
         xpc_dictionary_set_value(output, "displays", displays)
@@ -124,6 +127,40 @@ import XPC
             record(id: "b", displayID: 3, active: true, backlight: "activeOn", width: 2007, height: 2853),
         ]))
         #expect(report.activeIntegrated == nil)
+    }
+
+    @Test func readsAPhoneThatWritesOneBacklightForTheDevice() throws {
+        // As an iPhone 17 on iOS 27.0 reports it: no layout, no per display backlight, and the
+        // TV out, wireless and resizable displays listed with no state of their own.
+        let report = try DisplayReport.parse(output(backlight: "activeOn", [
+            record(id: "lcd", displayID: 1, active: nil, backlight: nil, rotation: "rot0"),
+            record(id: "tv", name: "TVOut", displayID: 2, active: nil, backlight: nil, integrated: false),
+            record(id: "wireless", name: "Wireless", displayID: 3, active: nil, backlight: nil, integrated: false),
+            record(id: "resizable", name: "Resizable", displayID: 4, active: nil, backlight: nil, integrated: false),
+        ]))
+        let active = try #require(report.activeIntegrated)
+        #expect(active.uniqueID == "lcd")
+        #expect(active.backlight == .activeOn)
+        #expect(report.isSettled)
+        #expect(report.displays.filter(\.isActive).count == 1)
+    }
+
+    @Test func namesADisplayByItsDeviceNameWhenItHasNoUniqueID() throws {
+        // iOS 26 runtimes write no uniqueId at all.
+        let report = try DisplayReport.parse(output(backlight: "activeOn", [
+            record(id: nil, deviceName: "PurpleMain", displayID: 1, active: nil, backlight: nil),
+            record(id: nil, deviceName: "PurpleTVOut", name: "TVOut", displayID: 2, active: nil, backlight: nil, integrated: false),
+        ]))
+        #expect(report.activeIntegrated?.uniqueID == "PurpleMain")
+    }
+
+    @Test func aBuiltInScreenWithNoStateIsStillNoAnswer() {
+        #expect(throws: (any Error).self) {
+            try DisplayReport.parse(output([record(active: nil, backlight: nil)]))
+        }
+        #expect(throws: (any Error).self) {
+            try DisplayReport.parse(output([record(id: nil, active: nil, backlight: "activeOn")]))
+        }
     }
 
     @Test func rotationsAreReadFromTheirNames() {

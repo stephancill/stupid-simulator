@@ -71,17 +71,22 @@ public struct DisplayReport: Sendable, Hashable {
             throw EngineError.privateCall(symbol: "displayinfo", message: "the report lists too many displays")
         }
         let carriesLayoutActivity = records.contains { XPCValue.bool($0, "active") != nil }
+        // An ordinary phone writes one backlight for the whole device rather than one per display.
+        let deviceBacklight = XPCValue.string(output, "backlightState")
         var seen: Set<String> = []
         var displays: [Display] = []
         for record in records {
-            guard let uniqueID = XPCValue.string(record, "uniqueId"), !uniqueID.isEmpty,
+            // iOS 26 runtimes write no uniqueId, only the device name the guest gives the display.
+            guard let uniqueID = XPCValue.string(record, "uniqueId") ?? XPCValue.string(record, "deviceName"),
+                  !uniqueID.isEmpty,
                   seen.insert(uniqueID).inserted else {
                 throw EngineError.privateCall(symbol: "displayinfo", message: "a display has no identity of its own")
             }
             let integrated = XPCValue.dictionary(record, "type").map {
                 xpc_dictionary_get_value($0, "integrated") != nil
             } ?? false
-            let backlight = Backlight(rawValue: XPCValue.string(record, "backlightState") ?? "") ?? .unknown
+            let backlightName = XPCValue.string(record, "backlightState") ?? (integrated ? deviceBacklight : nil)
+            let backlight = Backlight(rawValue: backlightName ?? "") ?? .unknown
             let isActive: Bool
             if carriesLayoutActivity {
                 // Layout is the authority when present; the backlight can lag it mid fold.
@@ -93,6 +98,9 @@ public struct DisplayReport: Sendable, Hashable {
                 switch backlight {
                 case .activeOn, .activeDimmed: isActive = true
                 case .off, .inactiveOn: isActive = false
+                // The TV out, wireless and resizable displays every phone lists carry no state at
+                // all. Only a built in screen with no state leaves the report without an answer.
+                case .unknown where !integrated: isActive = false
                 case .unknown:
                     throw EngineError.privateCall(symbol: "displayinfo", message: "a display's activity is unknown")
                 }
