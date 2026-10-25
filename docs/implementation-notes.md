@@ -3,6 +3,14 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## Version through a symlink
+
+Install Command Line Tool links the CLI onto the PATH, and run through that link `Bundle.main`
+is the link's folder, so `--version` (and anything else reading the bundle) reported
+`0.0.0-dev`. `Brand.runningBundle` finds the app again from the resolved executable
+(`<app>/Contents/MacOS/<name>`); a bare source build still reports `0.0.0-dev`. Inherited from
+upstream 0.2.0, where `odhub --version` through the link does the same.
+
 ## Agent skill
 
 `skills/stupid-simulator/` is the agent skill for this CLI. It replaces two earlier local skills:
