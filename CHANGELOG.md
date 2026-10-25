@@ -3,6 +3,17 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.4.0
+
+- Toggle Software Keyboard (⌘K) in I/O ▸ Keyboard shows or hides the on-screen keyboard while a text
+  field has focus, as in the classic Simulator. `stupidsim button <udid> software-keyboard` does the
+  same from the command line.
+- Copy on a screenshot preview copies the image, not the file's path.
+- Screenshots taken in a row stack on one preview card with a count. Copy puts all of them on the
+  pasteboard, and Open, Reveal in Finder, Delete and Save To act on the whole stack.
+- The preview card stays while the pointer is on it or its menu is open, instead of closing under
+  you after six seconds.
+
 ## 0.3.2
 
 - `stupidsim --version` reports the app's version when run through the link Install Command Line
