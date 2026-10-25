@@ -3,6 +3,15 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## Releases
+
+Releases are cut locally with `scripts/sign-and-notarize.sh`, then published with `gh release
+create`, following the same steps as `.github/workflows/release.yml` (which needs repository secrets
+this fork has not set up). Signing uses a Developer ID Application identity from the login keychain;
+notarization uses an App Store Connect team API key passed through `ODH_ASC_KEY_ID`,
+`ODH_ASC_ISSUER_ID` and `ODH_ASC_KEY_PATH`. The update feed step is skipped while the app carries no
+`SUFeedURL`. `create-dmg` 8.1.0 is required on `PATH`.
+
 ## Rebrand
 
 - App: `stupid simulator.app` (the name is lowercase everywhere users see it), executable `StupidSimulator`, bundle identifier

@@ -34,11 +34,20 @@ It keeps upstream's app and adds what driving simulators from scripts and agents
 What changed, why, and what was verified on which Xcode and runtime is in
 [docs/implementation-notes.md](docs/implementation-notes.md).
 
+<p align="center">
+  <a href="https://github.com/stephancill/stupid-simulator/releases/latest/download/StupidSimulator.dmg">
+    <img src="icons/download-button.png" width="332" alt="Download for macOS">
+  </a>
+</p>
+
 ## Install
 
-There is no signed release yet. Build it from source (see [Building from source](#building-from-source)),
-then copy `build/stupid simulator.app` to Applications. In-app updates are off until this fork
-publishes its own signed feed.
+Download [StupidSimulator.dmg](https://github.com/stephancill/stupid-simulator/releases/latest/download/StupidSimulator.dmg),
+drag stupid simulator to Applications and launch it. Every version, with its checksums, is on
+[Releases](https://github.com/stephancill/stupid-simulator/releases). The app is signed with a
+Developer ID certificate and notarized, so there is no Gatekeeper warning. It does not update itself
+yet: in-app updates are off until this fork publishes its own signed feed, so check Releases for new
+versions.
 
 The `stupidsim` command line tool ships inside the bundle. Choose **stupid simulator → Install
 Command Line Tool** and it links `stupidsim` into a folder already on your `PATH`, asking for your

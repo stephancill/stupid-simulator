@@ -84,11 +84,12 @@ shasum -a 256 -c SHA256SUMS
 
 ## Credits
 
-Built after studying two MIT licensed projects, and better for both:
+A fork of [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) by Samuel Abada (MIT),
+which was built after studying two MIT licensed projects, and better for both:
 [Siniulator](https://github.com/kmagiera/Siniulator) by Krzysztof Magiera, and
 [idb / FBSimulatorControl](https://github.com/facebook/idb) by Meta. What was adapted from each, down
 to the individual constants, is listed in
-[THIRD_PARTY_NOTICES.md]({REPOSITORY}/blob/dev/THIRD_PARTY_NOTICES.md).
+[THIRD_PARTY_NOTICES.md]({REPOSITORY}/blob/main/THIRD_PARTY_NOTICES.md).
 
 ## Tell me what breaks
 

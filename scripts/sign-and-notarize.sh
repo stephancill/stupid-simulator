@@ -48,7 +48,13 @@ echo "== checksums, from the stapled artifacts =="
 
 echo
 echo "== the update feed, signed over the final bytes =="
-"${repo_root}/scripts/appcast.sh" "${dmg}"
+# A build with no feed in its Info.plist cannot take updates, so there is no feed to write. That is
+# every build until this fork publishes its own signed feed.
+if /usr/libexec/PlistBuddy -c "Print :SUFeedURL" "${app}/Contents/Info.plist" >/dev/null 2>&1; then
+  "${repo_root}/scripts/appcast.sh" "${dmg}"
+else
+  echo "skipped: the app has no SUFeedURL, so it takes no updates"
+fi
 
 echo
 echo "== what Gatekeeper makes of them =="

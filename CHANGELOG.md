@@ -3,6 +3,24 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.3.0
+
+The first release of stupid simulator, a fork of OpenDeviceHub 0.2.0.
+
+- Renamed to stupid simulator, with its own icon, bundle identifier and `stupidsim` command line
+  tool, so it installs beside OpenDeviceHub. In-app updates are off until this fork has its own
+  signed feed.
+- Typing works: keys reach the device on Xcode 27, `stupidsim type` holds Shift for capitals and
+  symbols instead of lowercasing or refusing them, and the window forwards Shift, Control and Option.
+- Home and Lock work, from the command line and from the buttons on the device's body.
+- `stupidsim ui-tree` prints the accessibility tree of the app in front, with the coordinates `tap`
+  takes. It works on ordinary iPhones and iOS 26 runtimes, whose display reports were refused before.
+- `--verify` on every input command fails unless the screen changes, so a script or an agent can
+  tell input that landed from input the device ignored.
+- `stupidsim paste` reads the pasteboard back and fails when Device Hub or pasteboard sync has
+  overwritten it.
+- `stupidsim screenshot`, `stupidsim list --json`, and `booted` in place of a UDID.
+
 ## 0.2.0
 
 - The camera control works on every iPhone that has one, not only the iPhone Duo, and Device,
