@@ -65,4 +65,23 @@ final class CapturePreviewLayoutTests: XCTestCase {
         XCTAssertGreaterThan(size.width, 0)
         XCTAssertGreaterThan(size.height, 0)
     }
+
+    func testASingleCaptureIsJustTheCard() {
+        let size = CapturePreviewLayout.stackSize(card: CGSize(width: 92, height: 200), count: 1)
+        XCTAssertEqual(size, CGSize(width: 92, height: 200))
+    }
+
+    func testAStackGrowsByOneOffsetPerCardBehindUpToTheDepth() {
+        let card = CGSize(width: 92, height: 200)
+        let offset = CapturePreviewLayout.stackOffset
+        XCTAssertEqual(
+            CapturePreviewLayout.stackSize(card: card, count: 2),
+            CGSize(width: 92 + offset, height: 200 + offset)
+        )
+        let deepest = CGFloat(CapturePreviewLayout.stackDepth) * offset
+        XCTAssertEqual(
+            CapturePreviewLayout.stackSize(card: card, count: 9),
+            CGSize(width: 92 + deepest, height: 200 + deepest)
+        )
+    }
 }

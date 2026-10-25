@@ -42,6 +42,18 @@ public enum CapturePreviewLayout {
         )
     }
 
+    /// How far each card behind the front one peeks out, up and to the right.
+    public static let stackOffset: CGFloat = 6
+    /// Cards drawn behind the front one. More captures than this still stack, they just add no more
+    /// depth, and the badge says how many there are.
+    public static let stackDepth = 2
+
+    /// The panel for `count` captures: the front card plus the offset of each card showing behind it.
+    public static func stackSize(card: CGSize, count: Int) -> CGSize {
+        let behind = CGFloat(min(max(count - 1, 0), stackDepth))
+        return CGSize(width: card.width + behind * stackOffset, height: card.height + behind * stackOffset)
+    }
+
     private static func clamp(_ value: CGFloat, low: CGFloat, high: CGFloat) -> CGFloat {
         guard high > low else { return low }
         return min(max(value, low), high)

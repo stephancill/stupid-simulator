@@ -3,6 +3,25 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## Capture preview card
+
+- Copy put two items on the pasteboard, the temporary file's URL and then the image, so paste
+  targets took the first and pasted a path that no longer existed once the capture was filed. A
+  screenshot is now copied as a single item with PNG and TIFF data and no URL. A recording, which has
+  no picture to copy, is filed first and copied as the file where it landed.
+- Screenshots taken while a screenshot card is showing join it as a stack instead of filing it: the
+  newest in front, up to two older ones peeking out behind, and a count badge. Copy puts one image
+  item per screenshot on the pasteboard, oldest first; Open, Reveal and Delete act on all of them, and
+  Save As becomes Save To, which asks for a folder and keeps the names. A recording still gets its own
+  card and files whatever was showing, as before. Paste targets that read only the first pasteboard
+  item get only the oldest screenshot.
+- The card no longer closes under the pointer: its countdown stops while the pointer is over it or
+  its menu is open and starts again from the full six seconds when both end. A screenshot joining a
+  stack restarts it too.
+- Verified on Xcode 27 (27A266a) with an iOS 27.0 device by driving the app with System Events and
+  synthetic clicks: three Save Screen presses made one card with a badge of 3, and Copy left three
+  items with `public.png` and `public.tiff` on the pasteboard and filed all three captures.
+
 ## Version through a symlink
 
 Install Command Line Tool links the CLI onto the PATH, and run through that link `Bundle.main`
