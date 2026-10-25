@@ -3,6 +3,15 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.3.2
+
+- `stupidsim --version` reports the app's version when run through the link Install Command Line
+  Tool puts on your PATH, instead of `0.0.0-dev`.
+- `stupidsim ui-tree` explains what to do when no app is in front (a device still starting, or
+  locked) instead of claiming the feature is missing from Xcode.
+- An agent skill, `skills/stupid-simulator`, for driving simulators with `stupidsim` from coding
+  agents.
+
 ## 0.3.1
 
 - A bolder app icon that stays legible at small sizes.
