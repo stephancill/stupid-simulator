@@ -1,5 +1,5 @@
 #!/bin/bash
-# Signs build/OpenDeviceHub.app with Developer ID and the hardened runtime.
+# Signs build/Stupid Simulator.app with Developer ID and the hardened runtime.
 #
 # Inside out, deepest first. Code signing seals a bundle around what it contains, so signing the
 # outer app first and a nested helper afterwards invalidates the outer seal. Notarization then
@@ -14,7 +14,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-app="${1:-${repo_root}/build/OpenDeviceHub.app}"
+app="${1:-${repo_root}/build/Stupid Simulator.app}"
 identity="${ODH_SIGNING_IDENTITY:-}"
 entitlements="${ODH_ENTITLEMENTS:-}"
 
@@ -52,7 +52,7 @@ sign "${sparkle}/Versions/B/Updater.app"
 sign "${sparkle}/Versions/B"
 # The command line tool is a separate Mach-O beside the app's own executable, so it carries its own
 # signature rather than being covered by the app's.
-sign "${app}/Contents/MacOS/odhub"
+sign "${app}/Contents/MacOS/stupidsim"
 # Last, which seals everything above.
 sign "${app}"
 
@@ -67,7 +67,7 @@ for component in \
   "${sparkle}/Versions/B/Autoupdate" \
   "${sparkle}/Versions/B/Updater.app" \
   "${sparkle}" \
-  "${app}/Contents/MacOS/odhub" \
+  "${app}/Contents/MacOS/stupidsim" \
   "${app}"; do
   printf '  %-56s ' "${component#"${app}/Contents/"}"
   if codesign --verify --strict "${component}" 2>/dev/null; then

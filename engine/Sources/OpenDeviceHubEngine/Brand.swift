@@ -1,19 +1,19 @@
 import Foundation
 
 public enum Brand {
-    public static let productName = "OpenDeviceHub"
-    public static let commandName = "odhub"
-    public static let viewerExecutableName = "odhub-viewer"
-    public static let bundledViewerExecutableName = "OpenDeviceHub"
-    public static let identifierPrefix = "opendevicehub"
+    public static let productName = "Stupid Simulator"
+    public static let commandName = "stupidsim"
+    public static let viewerExecutableName = "stupidsim-viewer"
+    public static let bundledViewerExecutableName = "StupidSimulator"
+    public static let identifierPrefix = "stupidsimulator"
 
     /// This app's own URL scheme, for links that name a simulator to open.
-    public static let urlScheme = "odhub"
+    public static let urlScheme = "stupidsim"
 
-    /// Based on the GitHub handle rather than the product name, so the app can be renamed and the
-    /// repository moved without it changing. Changing it after a release makes macOS treat the app
-    /// as a different one, orphaning every copy already installed.
-    public static let bundleIdentifier = "io.github.mastersam07.simviewer"
+    /// Distinct from upstream OpenDeviceHub's, so both can be installed side by side. Changing it
+    /// after a release makes macOS treat the app as a different one, orphaning every copy already
+    /// installed.
+    public static let bundleIdentifier = "net.stupidtech.stupidsimulator"
 
     /// Read from the bundle that is running, which is where the release build writes it. A source
     /// build has no bundle and says so, so a development copy is never mistaken for a release.

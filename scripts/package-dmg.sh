@@ -15,7 +15,7 @@ set -euo pipefail
 create_dmg_version="8.1.0"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-app="${1:-${repo_root}/build/OpenDeviceHub.app}"
+app="${1:-${repo_root}/build/Stupid Simulator.app}"
 [ -d "${app}" ] || { echo "No app at ${app}" >&2; exit 1; }
 
 installed="$(create-dmg --version 2>/dev/null || true)"
@@ -26,14 +26,14 @@ if [ "${installed}" != "${create_dmg_version}" ]; then
 fi
 
 version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "${app}/Contents/Info.plist")"
-dmg="${repo_root}/build/OpenDeviceHub-${version}.dmg"
+dmg="${repo_root}/build/StupidSimulator-${version}.dmg"
 staging="$(mktemp -d)"
 cleanup() { rm -rf "${staging}"; }
 trap cleanup EXIT INT TERM
 
 # Its progress goes to standard error, so standard output stays the DMG's path alone.
 create-dmg --overwrite --no-version-in-filename --no-code-sign \
-  --dmg-title="OpenDeviceHub ${version}" "${app}" "${staging}" >&2
+  --dmg-title="Stupid Simulator ${version}" "${app}" "${staging}" >&2
 made="$(find "${staging}" -maxdepth 1 -name '*.dmg' -print -quit)"
 [ -n "${made}" ] || { echo "create-dmg made no DMG" >&2; exit 1; }
 

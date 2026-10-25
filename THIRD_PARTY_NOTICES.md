@@ -1,6 +1,6 @@
 # Third party notices
 
-OpenDeviceHub is released under the MIT license (see `LICENSE`).
+Stupid Simulator, a fork of OpenDeviceHub, is released under the MIT license (see `LICENSE`).
 
 ## Adapted code
 

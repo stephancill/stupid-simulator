@@ -39,7 +39,7 @@ final class ExecutableLocatorTests: XCTestCase {
         let running = URL(fileURLWithPath: "/var/empty/build/odhub")
         XCTAssertEqual(
             ExecutableLocator.siblingURL(of: running, named: Brand.viewerExecutableName).path,
-            "/var/empty/build/odhub-viewer"
+            "/var/empty/build/\(Brand.viewerExecutableName)"
         )
     }
 

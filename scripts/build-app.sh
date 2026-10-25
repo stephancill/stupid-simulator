@@ -1,7 +1,7 @@
 #!/bin/bash
-# Builds build/OpenDeviceHub.app: the viewer, the odhub CLI beside it, an Info.plist and an icon.
+# Builds build/Stupid Simulator.app: the viewer, the stupidsim CLI beside it, an Info.plist and an icon.
 #
-# The bundle is what gives the app its name. Run as a bare executable it is called odhub-viewer,
+# The bundle is what gives the app its name. Run as a bare executable it is called stupidsim-viewer,
 # because that is all macOS has to go on; inside a bundle the name comes from CFBundleName.
 #
 # Usage: scripts/build-app.sh [debug|release]
@@ -18,7 +18,7 @@ case "${configuration}" in
   *) echo "Usage: $0 [debug|release]" >&2; exit 1 ;;
 esac
 
-app="${repo_root}/build/OpenDeviceHub.app"
+app="${repo_root}/build/Stupid Simulator.app"
 contents="${app}/Contents"
 
 if [ "${configuration}" = "release" ]; then
@@ -40,7 +40,7 @@ done
 echo "Building ${configuration} ${marketing_version} (${build_number}) for ${ODH_ARCHS:-arm64}"
 # One product per invocation: swift build takes a single --product and quietly builds nothing
 # useful when given two.
-for product in odhub-viewer odhub; do
+for product in stupidsim-viewer stupidsim; do
   "${repo_root}/scripts/build.sh" --configuration "${configuration}" "${architectures[@]}" \
     --product "${product}" >/dev/null
 done
@@ -50,10 +50,10 @@ binaries="$("${repo_root}/scripts/build.sh" --configuration "${configuration}" \
 rm -rf "${app}"
 mkdir -p "${contents}/MacOS" "${contents}/Resources" "${contents}/Frameworks"
 
-# The viewer is installed under the app's own name so the process is called OpenDeviceHub
+# The viewer is installed under the app's own name so the process is called StupidSimulator
 # everywhere, including Activity Monitor. The CLI keeps its name, because that is what is typed.
-cp "${binaries}/odhub-viewer" "${contents}/MacOS/OpenDeviceHub"
-cp "${binaries}/odhub" "${contents}/MacOS/odhub"
+cp "${binaries}/stupidsim-viewer" "${contents}/MacOS/StupidSimulator"
+cp "${binaries}/stupidsim" "${contents}/MacOS/stupidsim"
 
 # Sparkle ships nested helpers of its own, an Autoupdate binary, an Updater.app and two XPC
 # services, which is why it is copied with ditto rather than cp: the symlinks in a framework's
@@ -87,8 +87,8 @@ iconutil --convert icns "${iconset}" --output "${contents}/Resources/AppIcon.icn
 printf 'APPL????' > "${contents}/PkgInfo"
 
 echo "Built ${app}"
-lipo -info "${contents}/MacOS/OpenDeviceHub" | sed 's/^/  /'
-lipo -info "${contents}/MacOS/odhub" | sed 's/^/  /'
+lipo -info "${contents}/MacOS/StupidSimulator" | sed 's/^/  /'
+lipo -info "${contents}/MacOS/stupidsim" | sed 's/^/  /'
 echo "  Sparkle: $(ls "${contents}/Frameworks")"
 echo "  nested helpers to sign first:"
 find "${contents}/Frameworks/Sparkle.framework/Versions/B" -maxdepth 2 \

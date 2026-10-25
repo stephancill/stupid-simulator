@@ -14,7 +14,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-app="${repo_root}/build/OpenDeviceHub.app"
+app="${repo_root}/build/Stupid Simulator.app"
 
 echo "== build =="
 "${repo_root}/scripts/build-app.sh" release
@@ -39,8 +39,8 @@ echo "== notarize and staple the disk image =="
 echo
 echo "== the same disk image under a name that never changes =="
 # The README's download button fetches this name from the latest release, so it never needs editing.
-cp "${dmg}" "${repo_root}/build/OpenDeviceHub.dmg"
-echo "${repo_root}/build/OpenDeviceHub.dmg"
+cp "${dmg}" "${repo_root}/build/StupidSimulator.dmg"
+echo "${repo_root}/build/StupidSimulator.dmg"
 
 echo
 echo "== checksums, from the stapled artifacts =="

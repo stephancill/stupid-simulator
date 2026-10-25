@@ -2,7 +2,8 @@
 
 Stupid Simulator is a fork of [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub): a native
 macOS app that shows iOS simulators in their own windows on Xcode 27+ (where Simulator.app was
-replaced by Device Hub), plus a command line tool for driving simulators from scripts and agents.
+replaced by Device Hub), plus a command line tool, `stupidsim`, for driving simulators from scripts
+and agents.
 
 ## Before making changes
 
@@ -31,12 +32,15 @@ replaced by Device Hub), plus a command line tool for driving simulators from sc
 
 ## Build and test
 
-- Build: `scripts/build.sh` (not plain `swift build`; it stamps the SDK version AppKit needs).
+- Build: `scripts/build.sh` (not plain `swift build`; it stamps the SDK version AppKit needs). The
+  CLI lands at `engine/.build/debug/stupidsim`.
 - Unit tests: `swift test --package-path engine`.
 - Integration tests need a booted simulator and are gated behind `ODH_INTEGRATION`.
 - App bundle: `scripts/build-app.sh debug`.
 - After changing input code, verify on a real booted simulator on both an iOS 27 and an iOS 26
-  runtime: check the effect with `ui-tree` or a screenshot, not the command's exit status.
+  runtime: check the effect with `ui-tree`, a screenshot or `--verify`, not the command's exit
+  status. Quit Device Hub before testing the pasteboard (it overwrites device pasteboards), and
+  note that quitting it shuts down the simulators it has open.
 
 ## Coding style
 

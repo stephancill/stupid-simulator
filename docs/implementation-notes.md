@@ -1,7 +1,22 @@
 # Implementation notes
 
-What Stupid Simulator changes relative to upstream OpenDeviceHub (forked from `dev` at `e50f07f`,
+What Stupid Simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
+
+## Rebrand
+
+- App: `Stupid Simulator.app`, executable `StupidSimulator`, bundle identifier
+  `net.stupidtech.stupidsimulator` (so it installs beside upstream), URL scheme `stupidsim://`.
+- CLI: `stupidsim`, and `stupidsim-viewer` for the bare viewer. Only the SwiftPM product names
+  changed; the targets, modules and source directories keep upstream's names (`odhub`,
+  `ODHubViewerApp`, `OpenDeviceHubEngine`, ...) so upstream commits cherry-pick cleanly. Names users
+  see come from `Brand.swift`, `packaging/Info.plist` and the scripts.
+- Sparkle's `SUFeedURL` and `SUPublicEDKey` were removed, which turns the updater off entirely (it
+  refuses to start without both). Left in, a build of this fork would have accepted upstream's
+  signed updates and replaced itself with OpenDeviceHub.
+- Release scripts point at `github.com/stephancill/stupid-simulator`. There is no signed release
+  or appcast yet.
+- Code comments that mention `odhub` were left as they are, again for cherry-picking.
 
 ## Agent oriented CLI
 

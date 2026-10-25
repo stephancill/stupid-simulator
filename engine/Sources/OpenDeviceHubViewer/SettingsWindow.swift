@@ -277,7 +277,7 @@ private struct SettingsView: View {
                         if let checkForUpdates = actions.checkForUpdates {
                             Button("Check for Updates\u{2026}", action: checkForUpdates)
                         }
-                        if let repository = URL(string: "https://github.com/Mastersam07/OpenDeviceHub") {
+                        if let repository = URL(string: "https://github.com/stephancill/stupid-simulator") {
                             Link("GitHub", destination: repository)
                         }
                     }

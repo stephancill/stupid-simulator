@@ -3,7 +3,7 @@
 ## Reporting something
 
 Open a
-[private advisory](https://github.com/Mastersam07/OpenDeviceHub/security/advisories/new). Please do
+[private advisory](https://github.com/stephancill/stupid-simulator/security/advisories/new). Please do
 not open a public issue for a vulnerability.
 
 Expect an acknowledgement within a week. There is no bounty; there is credit in the advisory and in
@@ -21,11 +21,11 @@ capability rather than crashing.
 
 **Every private call is checked first.** Classes are looked up by name and selectors through
 `respondsToSelector:` before use, and everything crossing that boundary is treated as possibly nil.
-Private API access is confined to two directories, `engine/Sources/OpenDeviceHubPrivate` and
-`engine/Sources/OpenDeviceHubEngine/Adapter`; no other file may touch a private symbol.
+Private API access is confined to two directories, `engine/Sources/Stupid SimulatorPrivate` and
+`engine/Sources/Stupid SimulatorEngine/Adapter`; no other file may touch a private symbol.
 
 **It can drive your simulators.** Taps, keystrokes and hardware buttons go to simulators on your
-machine, from the app and from the `odhub` command. It does not touch physical devices.
+machine, from the app and from the `stupidsim` command. It does not touch physical devices.
 
 **It can write outside its own bundle**, in exactly two places, both of which you ask for:
 screenshots and recordings go to your Desktop, and **Install Command Line Tool** creates one symlink

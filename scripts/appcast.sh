@@ -14,13 +14,13 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-app="${repo_root}/build/OpenDeviceHub.app"
+app="${repo_root}/build/Stupid Simulator.app"
 [ -d "${app}" ] || { echo "No app at ${app}" >&2; exit 1; }
 
 version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "${app}/Contents/Info.plist")"
 build_number="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "${app}/Contents/Info.plist")"
 minimum_system="$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "${app}/Contents/Info.plist")"
-artifact="${1:-${repo_root}/build/OpenDeviceHub-${version}.dmg}"
+artifact="${1:-${repo_root}/build/StupidSimulator-${version}.dmg}"
 [ -f "${artifact}" ] || { echo "No artifact at ${artifact}" >&2; exit 1; }
 
 # The same refusal as the checksums: a signature over an unstapled artifact describes a file nobody
@@ -53,7 +53,7 @@ actual_length="$(stat -f%z "${artifact}")"
 
 # That version's own release, not a floating "latest": an enclosure has to keep pointing at the
 # build it was signed for, whatever is released afterwards.
-download_url="https://github.com/Mastersam07/OpenDeviceHub/releases/download/v${version}/$(basename "${artifact}")"
+download_url="https://github.com/stephancill/stupid-simulator/releases/download/v${version}/$(basename "${artifact}")"
 
 notes="$(python3 - "${repo_root}/CHANGELOG.md" "${version}" <<'PY'
 import html, sys
@@ -77,9 +77,9 @@ cat > "${output}" <<XML
 <?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
-    <title>OpenDeviceHub</title>
-    <link>https://mastersam07.github.io/appcast/simviewer.xml</link>
-    <description>Updates for OpenDeviceHub.</description>
+    <title>Stupid Simulator</title>
+    <link>https://stephancill.github.io/stupid-simulator/appcast.xml</link>
+    <description>Updates for Stupid Simulator.</description>
     <language>en</language>
     <item>
       <title>${version}</title>

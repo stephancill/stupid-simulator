@@ -170,7 +170,7 @@ func socialPreview(width: Int = 1280, height: Int = 640) -> Data {
     )
 
     let left: CGFloat = 470
-    let title = "OpenDeviceHub"
+    let title = "Stupid Simulator"
     let tagline = "Your iOS simulators in windows again, one per device."
     let footnote = "Open source, MIT licensed. For Xcode 26 and 27 on macOS 14 or later."
 

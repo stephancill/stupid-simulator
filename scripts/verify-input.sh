@@ -11,7 +11,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 bundle_id="io.opendevicehub.testhost"
-odhub="${repo_root}/engine/.build/debug/odhub"
+stupidsim="${repo_root}/engine/.build/debug/stupidsim"
 
 udid="${1:-}"
 if [ -z "${udid}" ]; then
@@ -23,7 +23,7 @@ for runtime, devices in json.load(sys.stdin)['devices'].items():
 raise SystemExit('no booted simulator, boot one first')")"
 fi
 
-[ -x "${odhub}" ] || "${repo_root}/scripts/build.sh" >/dev/null
+[ -x "${stupidsim}" ] || "${repo_root}/scripts/build.sh" >/dev/null
 app="$("${repo_root}/scripts/build-test-host.sh")"
 
 echo "Device: ${udid}"
@@ -40,7 +40,7 @@ events="${container}/Documents/events.txt"
 expected_taps=("0.5000 0.7000" "0.2500 0.3000" "0.8000 0.6000")
 for point in "${expected_taps[@]}"; do
   read -r x y <<< "${point}"
-  "${odhub}" tap "${udid}" --x "${x}" --y "${y}" >/dev/null
+  "${stupidsim}" tap "${udid}" --x "${x}" --y "${y}" >/dev/null
   sleep 1
 done
 sleep 1
@@ -79,7 +79,7 @@ for devices in json.load(sys.stdin)['devices'].values():
             print(device.get('deviceTypeIdentifier', '')); raise SystemExit
 " "${udid}")"
 
-if [[ "${device_type}" == *iPad* ]] || "${odhub}" doctor 2>/dev/null | grep -q "buttons:.*home"; then
+if [[ "${device_type}" == *iPad* ]] || "${stupidsim}" doctor 2>/dev/null | grep -q "buttons:.*home"; then
   upside_down_expected="UPSIDEDOWN"
 else
   upside_down_expected="refused"
@@ -92,7 +92,7 @@ last_orientation() {
 check_orientation() {
   local sent="$1" want="$2" before
   before="$(last_orientation)"
-  "${odhub}" rotate "${udid}" "${sent}" >/dev/null
+  "${stupidsim}" rotate "${udid}" "${sent}" >/dev/null
   sleep 3
   local got
   got="$(last_orientation)"
@@ -117,7 +117,7 @@ check_orientation landscapeLeft LANDSCAPELEFT || failures=$((failures + 1))
 check_orientation landscapeRight LANDSCAPERIGHT || failures=$((failures + 1))
 check_orientation portrait PORTRAIT || failures=$((failures + 1))
 check_orientation portraitUpsideDown "${upside_down_expected}" || failures=$((failures + 1))
-"${odhub}" rotate "${udid}" portrait >/dev/null 2>&1 || true
+"${stupidsim}" rotate "${udid}" portrait >/dev/null 2>&1 || true
 
 if [ "${failures}" -eq 0 ]; then
   echo "PASS: every tap arrived where it was sent, and the device turned as expected."

@@ -21,7 +21,7 @@ final class DeviceLinkTests: XCTestCase {
     }
 
     func testOurOwnSchemeNamesASimulator() {
-        XCTAssertEqual(destination("odhub://open?udid=\(udid)"), .simulator(udid: udid))
+        XCTAssertEqual(destination("\(Brand.urlScheme)://open?udid=\(udid)"), .simulator(udid: udid))
     }
 
     func testTheUdidIsNormalisedToUppercase() {
@@ -66,7 +66,7 @@ final class DeviceLinkTests: XCTestCase {
     }
 
     func testOurSchemeWithoutAUdidIsNotALink() {
-        XCTAssertEqual(destination("odhub://open"), .notADeviceLink)
-        XCTAssertEqual(destination("odhub://elsewhere?udid=\(udid)"), .notADeviceLink)
+        XCTAssertEqual(destination("\(Brand.urlScheme)://open"), .notADeviceLink)
+        XCTAssertEqual(destination("\(Brand.urlScheme)://elsewhere?udid=\(udid)"), .notADeviceLink)
     }
 }

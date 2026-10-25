@@ -2,10 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>OpenDeviceHub</string>
-  <key>CFBundleDisplayName</key><string>OpenDeviceHub</string>
-  <key>CFBundleIdentifier</key><string>io.github.mastersam07.simviewer</string>
-  <key>CFBundleExecutable</key><string>OpenDeviceHub</string>
+  <key>CFBundleName</key><string>Stupid Simulator</string>
+  <key>CFBundleDisplayName</key><string>Stupid Simulator</string>
+  <key>CFBundleIdentifier</key><string>net.stupidtech.stupidsimulator</string>
+  <key>CFBundleExecutable</key><string>StupidSimulator</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
@@ -14,7 +14,7 @@
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
-  <key>NSHumanReadableCopyright</key><string>MIT licensed. Not affiliated with or endorsed by Apple.</string>
+  <key>NSHumanReadableCopyright</key><string>MIT licensed. A fork of OpenDeviceHub. Not affiliated with or endorsed by Apple.</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
 
   <!-- Links that name a device. `devices` belongs to Device Hub by default; claiming it here only
@@ -23,21 +23,21 @@
   <key>CFBundleURLTypes</key>
   <array>
     <dict>
-      <key>CFBundleURLName</key><string>io.github.mastersam07.simviewer.open</string>
+      <key>CFBundleURLName</key><string>net.stupidtech.stupidsimulator.open</string>
       <key>CFBundleTypeRole</key><string>Viewer</string>
-      <key>CFBundleURLSchemes</key><array><string>odhub</string></array>
+      <key>CFBundleURLSchemes</key><array><string>stupidsim</string></array>
     </dict>
     <dict>
-      <key>CFBundleURLName</key><string>io.github.mastersam07.simviewer.devices</string>
+      <key>CFBundleURLName</key><string>net.stupidtech.stupidsimulator.devices</string>
       <key>CFBundleTypeRole</key><string>Viewer</string>
       <key>CFBundleURLSchemes</key><array><string>devices</string></array>
     </dict>
   </array>
 
-  <!-- Sparkle. The feed and the key are what make this a release build: without both, the updater
-       is never created. Neither may change once a version has shipped. -->
-  <key>SUFeedURL</key><string>https://mastersam07.github.io/appcast/simviewer.xml</string>
-  <key>SUPublicEDKey</key><string>ZvBlUJbzcMueAq6HtYF6yq9lRrtb6BCHN+F/FWRJG4M=</string>
+  <!-- Sparkle. The feed (SUFeedURL) and the key (SUPublicEDKey) are what make this a release build:
+       without both, the updater is never created. Upstream's were removed so this fork can never
+       update itself into OpenDeviceHub; add this fork's own once it publishes a signed feed. Neither
+       may change once a version has shipped. -->
   <key>SUEnableAutomaticChecks</key><true/>
   <key>SUScheduledCheckInterval</key><integer>86400</integer>
   <!-- The user decides when to install. Silent installation is off deliberately. -->

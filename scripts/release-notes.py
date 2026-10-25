@@ -16,7 +16,7 @@ import sys
 import importlib.util
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-REPOSITORY = "https://github.com/Mastersam07/OpenDeviceHub"
+REPOSITORY = "https://github.com/stephancill/stupid-simulator"
 
 
 def changelog_section(version: str) -> str:
@@ -93,7 +93,7 @@ to the individual constants, is listed in
 ## Tell me what breaks
 
 If something does not work, please [open an issue]({REPOSITORY}/issues/new/choose):
-`odhub doctor` prints almost everything the bug form asks for.""")
+`stupidsim doctor` prints almost everything the bug form asks for.""")
     return 0
 
 

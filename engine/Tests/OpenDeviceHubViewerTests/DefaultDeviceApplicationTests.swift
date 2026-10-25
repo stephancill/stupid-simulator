@@ -7,7 +7,7 @@ import XCTest
 /// one assumes was there.
 @MainActor
 final class DefaultDeviceApplicationTests: XCTestCase {
-    private let ours = "io.github.mastersam07.simviewer"
+    private let ours = "net.stupidtech.stupidsimulator"
     private let deviceHub = "com.apple.dt.Devices"
 
     func testItGoesBackToWhoeverHeldIt() {

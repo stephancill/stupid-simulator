@@ -11,7 +11,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-binary="${repo_root}/engine/.build/debug/odhub"
+binary="${repo_root}/engine/.build/debug/stupidsim"
 device_name="iPhone 17 Pro"
 bundle_id="com.apple.Preferences"
 
