@@ -1,0 +1,55 @@
+# Implementation notes
+
+What Stupid Simulator changes relative to upstream OpenDeviceHub (forked from `dev` at `e50f07f`,
+v0.2.0), and what has been verified where. Newest first.
+
+## Accessibility tree (upstream PR #88)
+
+Merged `odhub ui-tree` from upstream PR #88 (unmerged upstream at the time of the fork). It reads the
+accessibility tree of the front app through `-[SimDevice sendAccessibilityRequestAsync:...]` and
+`AccessibilityPlatformTranslation`, and prints each element's centre in the normalized coordinates
+`tap` takes. `--json` prints the raw tree with frames in points.
+
+## Display report parsing
+
+`DisplayReport.parse` refused the report of every ordinary iPhone, so `ui-tree` (and the viewer's
+orientation reads) failed with "a display's activity is unknown" or "a display has no identity of
+its own". Observed on Xcode 27 (27A266a):
+
+- An ordinary phone writes `backlightState` once at the top of the report, not per display, and no
+  per display `active`. Only the foldable writes both per display, which is what the parser was
+  written against.
+- Every phone also lists TVOut, Wireless and (on iOS 27) Resizable displays, none integrated and with
+  no state at all.
+- iOS 26.3 runtimes write no `uniqueId`; each display only has a `deviceName` (`PurpleMain`,
+  `PurpleTVOut`, ...).
+
+The parser now falls back to the device wide backlight for integrated displays, treats a
+non-integrated display with no state as inactive, and names a display by `deviceName` when it has no
+`uniqueId`. A built in screen with no state at all is still refused.
+
+## Keyboard input
+
+- `IndigoHIDMessageForKeyboardArbitrary(usage, isDown)` builds a message the guest accepts and then
+  ignores on Xcode 27 (27A266a), on iOS 27.0 and iOS 26.3 alike: `odhub type` reported success and
+  typed nothing. Keys now go through `IndigoHIDMessageForHIDArbitrary(target, page, usage,
+  direction)` on the keyboard usage page (0x07) with the touch target, directions 1 and 2 (the
+  approach Baguette uses). Verified typing into Settings search and Safari's address bar on iOS
+  27.0. This is the shared input session, so it changes the window's keyboard path too.
+- `odhub type` lowercased its input, so capitals were typed as lowercase without warning, and it
+  refused any symbol on a shifted key (upstream issue #90). `KeyboardMap.keys(forTyping:)` now maps
+  each character on a US layout to a key and whether Shift is held, and `type` presses left Shift
+  (0xE1) around shifted keys. Characters with no US key (accents, emoji) are refused.
+- The window forwarded key presses but not modifiers, so Shift never reached the guest. The screen
+  view now forwards Shift, Control and Option through `flagsChanged`, reading the device dependent
+  flag so each side's key is tracked separately. Command is deliberately not forwarded: the Mac's
+  menus own it.
+
+## Known gaps
+
+- On iOS 26 runtimes, touches sent through `IndigoHIDMessageForMouseNSEvent` are dropped or read
+  as Home gestures, and so are rotation and the home gesture. Baguette works around this with an
+  IOHIDEvent digitizer path (`IOHIDDigitizerDispatch`).
+- `button home` and `button lock` did nothing on iOS 27.0 in testing, while `home-swipe` worked.
+- Input commands report success when CoreSimulator accepts the message, which says nothing about
+  whether the guest acted on it.
