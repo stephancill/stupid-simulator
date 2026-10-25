@@ -30,7 +30,7 @@ notarization uses an App Store Connect team API key passed through `ODH_ASC_KEY_
   `make-icon.swift` places it on Apple's icon grid, an 864 unit plate rounded at 190 in a 1024
   canvas, for the app's iconset and the `icons/` files. The social preview and download button are
   ink on paper to match. The vector `icon.svg` was removed, as it was a copy of upstream's artwork.
-  At 16 and 32 pixels the thin line fades to grey.
+  The drawing has a bold line so it still reads at 32 pixels.
 
 ## Agent oriented CLI
 
