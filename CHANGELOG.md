@@ -3,6 +3,11 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.4.1
+
+- `stupidsim key` presses keys by name: Delete, Return, Escape, Tab, the arrows and shortcuts such
+  as `cmd+a`, which `stupidsim type` could not send.
+
 ## 0.4.0
 
 - Toggle Software Keyboard (⌘K) in I/O ▸ Keyboard shows or hides the on-screen keyboard while a text
