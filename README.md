@@ -24,7 +24,8 @@ stupid simulator is a fork of [OpenDeviceHub](https://github.com/Mastersam07/Ope
 It keeps upstream's app and adds what driving simulators from scripts and agents needed:
 
 - **Typing works**: `type` sends keys the device acts on, with Shift for capitals and symbols, and
-  the window forwards Shift, Control and Option.
+  the window forwards Shift, Control and Option. `key` presses keys by name, such as Delete, the
+  arrows or ⌘A.
 - **Home and Lock work**, from the command line and the device's body.
 - **`ui-tree`** (upstream pull request #88) reads the accessibility tree, and works on ordinary
   iPhones and iOS 26 runtimes.
@@ -149,6 +150,7 @@ or pasteboard sync has overwritten it.
 | `swipe` | `stupidsim swipe A1B2C3D4 --from-x 0.5 --from-y 0.8 --to-x 0.5 --to-y 0.2` |
 | `pinch` | `stupidsim pinch A1B2C3D4 --from 0.2 --to 0.7` |
 | `type` | `stupidsim type A1B2C3D4 "Hello@example.com!"` |
+| `key` | `stupidsim key A1B2C3D4 delete --repeat 3` or `stupidsim key A1B2C3D4 cmd+a delete` |
 | `paste` | `echo hello \| stupidsim paste A1B2C3D4` |
 | `copy` | `stupidsim copy A1B2C3D4` |
 | `button` | `stupidsim button A1B2C3D4 home` |

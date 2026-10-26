@@ -55,6 +55,7 @@ stupidsim ui-tree <udid> --labelled            # confirm you are where you meant
 | Swipe / scroll | `stupidsim swipe <udid> --from-x 0.5 --from-y 0.75 --to-x 0.5 --to-y 0.3 [--verify]` |
 | Pinch | `stupidsim pinch <udid> --from 0.2 --to 0.7 [--x --y --angle]` |
 | Type | `stupidsim type <udid> 'Hello@example.com #1!' [--verify]` |
+| Delete, arrows, Return, shortcuts | `stupidsim key <udid> delete [--repeat 3]`, `stupidsim key <udid> cmd+a delete`, `left`, `return`, `escape` |
 | Home, Lock, volume | `stupidsim button <udid> home\|lock\|volume-up\|volume-down [--verify]` |
 | Show/hide on-screen keyboard | `stupidsim button <udid> software-keyboard` (needs a focused text field) |
 | Home gesture, app switcher | `stupidsim home-swipe <udid>`, `stupidsim app-switcher <udid>` |

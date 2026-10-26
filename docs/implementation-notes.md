@@ -168,6 +168,14 @@ disappear). With no text field focused it does nothing.
   refused any symbol on a shifted key (upstream issue #90). `KeyboardMap.keys(forTyping:)` now maps
   each character on a US layout to a key and whether Shift is held, and `type` presses left Shift
   (0xE1) around shifted keys. Characters with no US key (accents, emoji) are refused.
+- `stupidsim type` takes only characters, so there was no way to press Delete, the arrows or a
+  shortcut from the command line, although the window could. `stupidsim key` presses keys by name
+  (`delete`, `forward-delete`, `return`, `escape`, `tab`, the arrows, `home`, `end`, page keys) or a
+  single US layout character, with `cmd`, `shift`, `ctrl` and `option` joined by `+`, through the
+  same session as `type`. Command is the HID left GUI usage (0xE3). Verified on Xcode 27 (27A266a)
+  with iOS 27.0 in Settings search, checked with `ui-tree`: "Hello" became "Hel" after `delete
+  --repeat 2`, "HXel" after `left left` and typing X, and empty after `cmd+a delete`. Not driven on
+  iOS 26: no iOS 26 runtime was installed.
 - The window forwarded key presses but not modifiers, so Shift never reached the guest. The screen
   view now forwards Shift, Control and Option through `flagsChanged`, reading the device dependent
   flag so each side's key is tracked separately. Command is deliberately not forwarded: the Mac's

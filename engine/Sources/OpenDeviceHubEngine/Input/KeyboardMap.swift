@@ -97,6 +97,74 @@ public enum KeyboardMap {
         return map
     }()
 
+    /// A key pressed by name, with the modifiers held around it, oldest first.
+    public struct KeyChord: Sendable, Hashable {
+        public let modifiers: [UInt32]
+        public let usage: UInt32
+
+        public init(modifiers: [UInt32], usage: UInt32) {
+            self.modifiers = modifiers
+            self.usage = usage
+        }
+    }
+
+    /// Keys with no character to type, by the names `stupidsim key` takes.
+    public static let usageByKeyName: [String: UInt32] = [
+        "delete": 0x2A, "backspace": 0x2A,
+        "forward-delete": 0x4C,
+        "return": 0x28, "enter": 0x28,
+        "escape": 0x29, "esc": 0x29,
+        "tab": 0x2B,
+        "space": 0x2C,
+        "left": 0x50, "right": 0x4F, "up": 0x52, "down": 0x51,
+        "home": 0x4A, "end": 0x4D, "page-up": 0x4B, "page-down": 0x4E,
+    ]
+
+    /// Left hand modifiers by name. Command is the GUI usage, which the guest reads as ⌘.
+    public static let modifierUsageByName: [String: UInt32] = [
+        "cmd": 0xE3, "command": 0xE3,
+        "shift": 0xE1,
+        "ctrl": 0xE0, "control": 0xE0,
+        "opt": 0xE2, "option": 0xE2, "alt": 0xE2,
+    ]
+
+    /// A chord such as `delete`, `cmd+a` or `shift+tab`: modifiers joined to one key with `+`.
+    /// The key is a name from `usageByKeyName` or a single character on a US layout, and an upper
+    /// character holds Shift. Names ignore case; a lone character keeps its own. Nil for anything
+    /// unknown, rather than pressing something else.
+    public static func chord(named text: String) -> KeyChord? {
+        var parts = text.split(separator: "+", omittingEmptySubsequences: false).map(String.init)
+        // "+" alone, or a trailing "cmd++", means the plus key.
+        if text.hasSuffix("++") || text == "+" {
+            parts.removeLast(2)
+            parts.append("+")
+        }
+        guard let key = parts.popLast(), !key.isEmpty else { return nil }
+
+        var modifiers: [UInt32] = []
+        for name in parts {
+            guard let usage = modifierUsageByName[name.lowercased()] else { return nil }
+            if !modifiers.contains(usage) { modifiers.append(usage) }
+        }
+
+        let usage: UInt32
+        if let named = usageByKeyName[key.lowercased()] {
+            usage = named
+        } else if key.count == 1, let character = key.first {
+            if let plain = usageByCharacter[character] {
+                usage = plain
+            } else if let upper = shiftedUsageByCharacter[character] {
+                usage = upper
+                if !modifiers.contains(leftShiftUsage) { modifiers.append(leftShiftUsage) }
+            } else {
+                return nil
+            }
+        } else {
+            return nil
+        }
+        return KeyChord(modifiers: modifiers, usage: usage)
+    }
+
     /// The upper character of each key on a US layout.
     static let shiftedUsageByCharacter: [Character: UInt32] = {
         var map: [Character: UInt32] = [:]
