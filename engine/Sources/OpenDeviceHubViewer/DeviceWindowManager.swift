@@ -16,15 +16,20 @@ public final class DeviceWindowManager {
     private let frameStore: WindowFrameStore
     private let settings: ViewerSettings
     private let shutdownDevice: @Sendable (String) throws -> Void
+    // Nil in tests, which run many managers in one process and would otherwise lock each other out,
+    // and lock out a copy of the app the developer has open.
+    private let claims: DeviceWindowClaims?
     private let placementGap: CGFloat = 12
 
     public init(
         frameStore: WindowFrameStore = WindowFrameStore(),
         settings: ViewerSettings = ViewerSettings(),
+        claims: DeviceWindowClaims? = nil,
         shutdown: @escaping @Sendable (String) throws -> Void = { try SimctlService().shutdown(udid: $0) }
     ) {
         self.frameStore = frameStore
         self.settings = settings
+        self.claims = claims
         self.shutdownDevice = shutdown
     }
 
@@ -39,6 +44,19 @@ public final class DeviceWindowManager {
 
     public func bringToFront(_ udid: String) {
         controllers[udid]?.window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Takes the device before anything is opened for it, so a device another viewer process shows
+    /// is refused before its display and input sessions are touched. `open` takes it too.
+    public func claim(_ udid: String) throws {
+        try claims?.claim(udid)
+    }
+
+    /// Lets go of a device claimed for a window that then failed to open. Does nothing while the
+    /// window is up.
+    public func releaseClaim(_ udid: String) {
+        guard controllers[udid] == nil else { return }
+        claims?.release(udid)
     }
 
     @discardableResult
@@ -63,27 +81,35 @@ public final class DeviceWindowManager {
             return existing
         }
 
-        let controller = try DeviceWindowController(
-            udid: device.udid,
-            title: "\(device.name) (\(device.runtimeName))",
-            deviceName: device.name,
-            runtimeName: device.runtimeName,
-            session: session,
-            input: input,
-            scaleMode: scaleMode,
-            bezelEnabled: bezelEnabled,
-            keepOnTop: keepOnTop,
-            frameStore: frameStore,
-            fpsLabel: showFPS ? device.name : nil,
-            chrome: chrome ?? ChromeLocator.chrome(forDeviceType: device.deviceTypeIdentifier),
-            foldsAtHinge: foldsAtHinge,
-            panelNativeRotation: panelNativeRotation,
-            unfoldedPanel: unfoldedPanel,
-            cover: cover,
-            retarget: retarget
-        )
+        try claim(device.udid)
+        let controller: DeviceWindowController
+        do {
+            controller = try DeviceWindowController(
+                udid: device.udid,
+                title: "\(device.name) (\(device.runtimeName))",
+                deviceName: device.name,
+                runtimeName: device.runtimeName,
+                session: session,
+                input: input,
+                scaleMode: scaleMode,
+                bezelEnabled: bezelEnabled,
+                keepOnTop: keepOnTop,
+                frameStore: frameStore,
+                fpsLabel: showFPS ? device.name : nil,
+                chrome: chrome ?? ChromeLocator.chrome(forDeviceType: device.deviceTypeIdentifier),
+                foldsAtHinge: foldsAtHinge,
+                panelNativeRotation: panelNativeRotation,
+                unfoldedPanel: unfoldedPanel,
+                cover: cover,
+                retarget: retarget
+            )
+        } catch {
+            releaseClaim(device.udid)
+            throw error
+        }
         controller.onClose = { [weak self] udid in
             self?.controllers.removeValue(forKey: udid)
+            self?.claims?.release(udid)
             self?.deviceTypes.removeValue(forKey: udid)
             self?.shutdownIfAsked(udid)
             self?.onDeviceClosed?(udid)
@@ -201,6 +227,7 @@ public final class DeviceWindowManager {
         controller.onClose = nil
         controller.stop()
         controller.window?.close()
+        claims?.release(udid)
         if shuttingDown {
             shutdownIfAsked(udid)
         }

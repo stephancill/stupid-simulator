@@ -82,7 +82,21 @@ struct ODHubViewer: ParsableCommand {
             if resetWindowPosition {
                 plan.udids.forEach(store.forget)
             }
-            let manager = DeviceWindowManager(frameStore: store)
+            let manager = DeviceWindowManager(frameStore: store, claims: DeviceWindowClaims())
+            // Another viewer process was asked for a device this one shows.
+            let showRequests = DistributedNotificationCenter.default().addObserver(
+                forName: DeviceWindowRequest.showDevice,
+                object: nil,
+                queue: .main
+            ) { notification in
+                guard let requested = notification.object as? String else { return }
+                MainActor.assumeIsolated {
+                    guard let udid = manager.openUDIDs.first(where: {
+                        $0.caseInsensitiveCompare(requested) == .orderedSame
+                    }) else { return }
+                    manager.bringToFront(udid)
+                }
+            }
 
             let pasteboard = PasteboardSyncController(
                 isAutomatic: settings.syncsPasteboard,
@@ -121,6 +135,13 @@ struct ODHubViewer: ParsableCommand {
             }
 
             var failures: [String] = []
+
+            // A device asked for by name that another viewer process already shows is brought
+            // forward there, so the refusal still ends with the device in front of the person.
+            let showElsewhere: @MainActor (Error) -> Void = { error in
+                guard case DeviceWindowError.openElsewhere(let udid, let pid) = error else { return }
+                DeviceWindowRequest.show(udid, ownedBy: pid)
+            }
 
             // The hinge provider overwrites an ordinary rotation, so a foldable turns through it.
             let turn: @MainActor (DeviceOrientation, String) -> Void = { orientation, udid in
@@ -189,6 +210,7 @@ struct ODHubViewer: ParsableCommand {
                 do {
                     try show(udid, plan.boot)
                 } catch {
+                    showElsewhere(error)
                     failures.append("\(udid): \(error.localizedDescription)")
                 }
             }
@@ -216,6 +238,7 @@ struct ODHubViewer: ParsableCommand {
                     }
                     guard !manager.isOpen(udid) else { return }
                     do { try show(udid, false) } catch {
+                        showElsewhere(error)
                         print("\(udid) started but could not be shown: \(error.localizedDescription)")
                     }
                 }
@@ -600,7 +623,7 @@ struct ODHubViewer: ParsableCommand {
             // once the run loop starts, so without this ARC releases them and the display sessions
             // die with them: the windows stay up and never draw again.
             application.delegate = delegate
-            withExtendedLifetime((manager, delegate, menuTarget, chooser, updates)) {
+            withExtendedLifetime((manager, delegate, menuTarget, chooser, updates, showRequests)) {
                 application.run()
             }
         }
@@ -621,6 +644,11 @@ struct ODHubViewer: ParsableCommand {
         }) else {
             throw EngineError.deviceNotFound(udid: udid)
         }
+
+        // Before booting or opening anything, so a device another viewer process shows is left
+        // alone. Released again unless a window ends up holding it.
+        try manager.claim(device.udid)
+        defer { manager.releaseClaim(device.udid) }
 
         if device.state != .booted {
             guard allowBoot else { throw EngineError.deviceNotBooted(udid: device.udid) }

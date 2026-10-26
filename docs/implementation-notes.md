@@ -3,6 +3,27 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## One window per simulator across processes
+
+- `DeviceWindowManager` already kept one window per device, but only within its own process, and
+  every `stupidsim view` starts its own viewer, as does a second copy of the app (a debug build next
+  to the installed one, say). Each could open a window on the same simulator.
+- A window now holds an exclusive `flock` on
+  `~/Library/Caches/net.stupidtech.stupidsimulator/windows/<UDID>.lock`, taken in `ViewerMain.open`
+  before booting or opening any session and released when the window closes or fails to open. The
+  kernel drops the lock when the process exits, so a crash never leaves a device unopenable. The file
+  holds the owner's pid, used only for the refusal message.
+- A refused open fails loudly (`already shown by another stupid simulator window (pid N)`, and
+  `stupidsim view` exits 1 when nothing opened) and posts a distributed notification asking the owner
+  to bring the window forward, then activates the owner by pid, since a background app cannot activate
+  itself on macOS 14+. A boot noticed by two running viewers opens the window in whichever claims
+  first; the other only reports it.
+- Tests construct managers without claims, so parallel tests and a running copy of the app do not
+  lock each other out.
+- Verified on Xcode 27 (27A266a) with an iOS 27.0 device: a second `stupidsim view` of the same UDID
+  was refused with the first viewer's pid, and the device opened again after the first viewer quit
+  and after it was killed with SIGKILL. Bringing the window forward was not checked visually.
+
 ## Capture preview card
 
 - Copy put two items on the pasteboard, the temporary file's URL and then the image, so paste
