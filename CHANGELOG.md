@@ -3,6 +3,12 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.4.2
+
+- A simulator opens in at most one window, even across `stupidsim view` runs and several copies of
+  the app. Asking for one that is already shown brings its window forward instead, and
+  `stupidsim view` says which process has it.
+
 ## 0.4.1
 
 - `stupidsim key` presses keys by name: Delete, Return, Escape, Tab, the arrows and shortcuts such
