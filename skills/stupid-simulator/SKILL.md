@@ -94,9 +94,14 @@ stupidsim notification <udid> open --match T               # tap it: opens the a
   reply` finds them by hit testing; by hand, `ui-tree --at x,y` reads what is at a point. Return in
   the field adds a newline rather than sending. `reply` needs a category whose only action is a text
   input, which opens the field straight away.
-- **A Notification Service Extension does not run** for `stupidsim push` (or `simctl push`): the
-  banner shows the payload as sent, `mutable-content` or not. NSE output is only testable on a
-  device, or with real APNs delivery to a simulator from a build signed with a team.
+- **`stupidsim push` runs the app's Notification Service Extension** when the payload has
+  `"mutable-content": 1`, as a device does, and prints what it made (`ran <extension>: title ...`).
+  The banner shows the extension's title, subtitle, body, thread, category and badge, and its
+  `userInfo` is delivered, so `--verify --expect` checks the extension's output. Its attachments and a
+  Communication Notification avatar are reported but not shown, since delivery is still through
+  `simctl push`. `--skip-service-extension` delivers the payload as sent. Plain `xcrun simctl push`
+  never runs the extension. The first run compiles a small helper with Xcode's simulator SDK, which
+  takes a few seconds.
 - **Ad-hoc simulator builds get no APNs device token.** `stupid-app run --simulator` signs without a
   team, so the app has no `aps-environment` (the simulator refuses to launch a team-less signature
   that has it), `registerForRemoteNotifications` gets no token, and SpringBoard logs "No valid

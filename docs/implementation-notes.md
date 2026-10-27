@@ -3,6 +3,47 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## Running Notification Service Extensions for simulated pushes
+
+- `simctl push` never runs an app's Notification Service Extension. CoreSimulatorBridge turns the
+  payload into a finished `UNNotificationRequest` and adds it on the app's behalf, so SpringBoard's
+  log goes straight to "Starting add notification pipeline" and skips the remote-notification path
+  (apsd to usernotificationsd) where the extension runs.
+- `ServiceExtensionHost` hosts the extension itself. A helper written in Objective-C, kept as a
+  string in the engine, is compiled with the active Xcode's simulator SDK into
+  `~/Library/Caches/net.stupidtech.stupidsimulator/service-extension-host/<hash>/` on first use
+  (keyed by the source, SDK path and SDK version), ad hoc signed, and run with `simctl spawn`.
+  Shipping it prebuilt would put an iOS simulator binary inside the notarized Mac app.
+- The helper does what usernotificationsd does: `+[NSExtension extensionWithIdentifier:error:]`,
+  `-beginExtensionRequestWithInputItems:error:`, `-_extensionContextForUUID:` and its
+  `_auxiliaryConnection`, then `didReceiveNotificationRequest:withCompletionHandler:` from
+  `_UNNotificationServiceExtensionRemoteXPCInterface` on the remote proxy. The request comes from
+  `+[UNNotificationRequest requestWithIdentifier:pushPayload:bundleIdentifier:]`, the system's own
+  payload conversion. At 25 seconds it sends `serviceExtensionTimeWillExpire` and gives up at 30.
+  It prints the serviced content as JSON: alert text, badge, category, thread, target content
+  identifier, interruption level, relevance, JSON-safe `userInfo`, attachments, and whether it has a
+  communication context.
+- The serviced notification cannot be posted as the app. CoreSimulatorBridge may because it holds
+  `com.apple.private.usernotifications.notification-simulator`; an ad hoc helper carrying that
+  entitlement is refused at spawn (SimXPCErrorDomain 163, "Security policy issue"), and without it
+  `-[UNUserNotificationCenter initWithBundleIdentifier:]` adds fail with UNErrorDomain 1. So `push`
+  turns the serviced content back into an APNs payload (without `mutable-content`, keeping the
+  original's sound) and delivers that through `simctl push`. Attachments and communication avatars
+  are reported, not shown.
+- `push` runs the extension when the payload has `"mutable-content": 1` and the app's `PlugIns` has an
+  `.appex` for `com.apple.usernotifications.service`; `--skip-service-extension` turns it off.
+- The test host now carries a Notification Service Extension that prefixes titles with "Serviced: "
+  and sets `userInfo["serviced"]`, built and ad hoc signed by `scripts/build-test-host.sh`. Launched
+  with `--request-notifications` it asks for permission and presents banners in front; otherwise it
+  does not ask, so the input scripts' screenshots are unchanged.
+- Verified on Xcode 27 (27A266a) with an iOS 27.0 device: the test host's banner read "Serviced:
+  Extension" after a `mutable-content` push, `--expect "Serviced: ..."` passed, a push without
+  `mutable-content` and one with `--skip-service-extension` showed the payload as sent, the
+  `Simulator Target Bundle` key worked, and a third-party app's extension ran (it passes unencrypted
+  payloads through unchanged). With the helper cached a push with `--verify` took 1.7 s; the first
+  run, compiling it, 5.4 s. Not checked: an extension that adds attachments or a communication
+  context, and the 30 second expiry.
+
 ## Notification banners, SpringBoard's tree and hit testing
 
 - `ui-tree` read only `-[AXPTranslator frontmostApplicationWithDisplayId:bridgeDelegateToken:]`, so
@@ -31,7 +72,8 @@ v0.2.0), and what has been verified where. Newest first.
   category: show, expand, dismiss and reply (SpringBoard logged the reply action with the typed
   text) from the home screen; open from the home screen cold-launched the app through the default
   action; `--expect` failed with exit 2 on a mismatch and printed the banner. A `mutable-content`
-  push did not start the app's Notification Service Extension. Not checked: landscape, and a
+  push did not start the app's Notification Service Extension (it does now; see the section above).
+  Not checked: landscape, and a
   category with several actions, where expanding shows buttons rather than the field.
 - Taps on notifications seemed not to open the app for two reasons. Banner taps did open it, but
   the app under test crashed on launch (a `nonisolated` async `didReceive` finishing off the main

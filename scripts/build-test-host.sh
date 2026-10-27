@@ -1,6 +1,7 @@
 #!/bin/bash
 # Builds the test host app the verification scripts install. It reports the orientation it is in
-# and echoes taps, so a script can read the device's state from a screenshot.
+# and echoes taps, so a script can read the device's state from a screenshot. It carries a
+# Notification Service Extension that prefixes titles with "Serviced: ", for `stupidsim push`.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,4 +20,16 @@ mkdir -p "${bundle}"
 xcrun --sdk iphonesimulator swiftc -sdk "${sdk}" -target "${target}" \
   "${source_dir}/main.swift" -o "${bundle}/ODHTestHost"
 cp "${source_dir}/Info.plist" "${bundle}/Info.plist"
+
+extension="${bundle}/PlugIns/NotificationService.appex"
+mkdir -p "${extension}"
+# An app extension's entry point is NSExtensionMain, which finds the principal class from Info.plist.
+xcrun --sdk iphonesimulator swiftc -sdk "${sdk}" -target "${target}" -application-extension \
+  -parse-as-library -module-name NotificationService \
+  "${repo_root}/testhost/NotificationService/NotificationService.swift" \
+  -Xlinker -e -Xlinker _NSExtensionMain -o "${extension}/NotificationService"
+cp "${repo_root}/testhost/NotificationService/Info.plist" "${extension}/Info.plist"
+# The system only launches a signed extension; ad hoc is enough on a simulator.
+codesign -s - -f "${extension}" >/dev/null 2>&1
+codesign -s - -f "${bundle}" >/dev/null 2>&1
 echo "${bundle}"

@@ -1,4 +1,5 @@
 import UIKit
+import UserNotifications
 
 /// A deliberately plain app used by the verification scripts. It reports the orientation it is in
 /// and echoes taps, so a script can read the device's state from a screenshot instead of guessing.
@@ -92,7 +93,30 @@ final class ViewController: UIViewController {
 }
 
 @objc(AppDelegate)
-final class AppDelegate: UIResponder, UIApplicationDelegate {
+final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    /// Launched with `--request-notifications`, it asks to show notifications and shows them while
+    /// in front, for testing `stupidsim push`. Not asked otherwise, so the permission alert never
+    /// covers the screen the input scripts read.
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        if CommandLine.arguments.contains("--request-notifications") {
+            let center = UNUserNotificationCenter.current()
+            center.delegate = self
+            center.requestAuthorization(options: [.alert, .badge, .sound]) { _, _ in }
+        }
+        return true
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list])
+    }
+
     func application(
         _ application: UIApplication,
         configurationForConnecting session: UISceneSession,

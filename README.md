@@ -152,7 +152,7 @@ or pasteboard sync has overwritten it.
 | `pinch` | `stupidsim pinch A1B2C3D4 --from 0.2 --to 0.7` |
 | `type` | `stupidsim type A1B2C3D4 "Hello@example.com!"` |
 | `key` | `stupidsim key A1B2C3D4 delete --repeat 3` or `stupidsim key A1B2C3D4 cmd+a delete` |
-| `push` | `stupidsim push booted --bundle-id com.example.App --title Hi --body There --verify` |
+| `push` | `stupidsim push booted --bundle-id com.example.App --title Hi --body There --verify`; a `mutable-content` payload runs the app's Notification Service Extension first |
 | `notification` | `stupidsim notification booted reply "On my way" --match There` |
 | `paste` | `echo hello \| stupidsim paste A1B2C3D4` |
 | `copy` | `stupidsim copy A1B2C3D4` |

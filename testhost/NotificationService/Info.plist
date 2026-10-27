@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key><string>NotificationService</string>
+  <key>CFBundleIdentifier</key><string>io.opendevicehub.testhost.NotificationService</string>
+  <key>CFBundleName</key><string>NotificationService</string>
+  <key>CFBundlePackageType</key><string>XPC!</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>
+  <key>MinimumOSVersion</key><string>17.0</string>
+  <key>NSExtension</key>
+  <dict>
+    <key>NSExtensionPointIdentifier</key><string>com.apple.usernotifications.service</string>
+    <key>NSExtensionPrincipalClass</key><string>NotificationService</string>
+  </dict>
+</dict>
+</plist>

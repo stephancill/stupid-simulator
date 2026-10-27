@@ -14,7 +14,10 @@ struct Push: AsyncParsableCommand {
             The app is --bundle-id, or the payload's "Simulator Target Bundle" key when that is
             omitted. Only ordinary app pushes are supported: not VoIP, complication or file provider.
             A push with nothing to show, such as a silent content-available push, is refused.
-            A Notification Service Extension does not run: the banner shows the payload as sent.
+            When the payload has "mutable-content": 1 and the app has a Notification Service
+            Extension, the extension runs first, as on a device, and the banner shows what it made.
+            Its title, subtitle, body, thread, category, badge and userInfo are delivered; its
+            attachments and a Communication Notification avatar are reported but cannot be shown.
             --verify waits for a banner showing the alert's title, subtitle and body, or every
             --expect instead, and prints its text. A push the app in front chooses not to present
             fails it. Act on the banner with `stupidsim notification`.
@@ -35,6 +38,9 @@ struct Push: AsyncParsableCommand {
 
     @Option(help: "The alert body, building the payload instead of reading one.")
     var body: String?
+
+    @Flag(help: "Deliver the payload as it is, without running the app's Notification Service Extension.")
+    var skipServiceExtension = false
 
     @Flag(help: "Fail unless a banner with the alert's text appears, and print the banner's text.")
     var verify = false
@@ -60,8 +66,11 @@ struct Push: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let json = try payloadJSON()
-        let target = bundleID ?? "the payload's target bundle"
+        var json = try payloadJSON()
+        let target = bundleID ?? Self.targetBundle(inPayload: json) ?? "the payload's target bundle"
+        if !skipServiceExtension, let serviced = try serviceExtension(json, target: target) {
+            json = serviced
+        }
         do {
             try SimctlService().push(json, bundleID: bundleID, udid: udid)
         } catch EngineError.simctl(_, _, let stderr) where stderr.contains(Self.notAuthorized) {
@@ -84,6 +93,42 @@ struct Push: AsyncParsableCommand {
             }
             throw ExitCode(Self.unverifiedExitCode)
         }
+    }
+
+    /// Runs the app's service extension when a device would, and returns the payload to deliver in
+    /// its place, or nil when the extension does not apply.
+    private func serviceExtension(_ json: String, target: String) throws -> String? {
+        guard let original = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+              let aps = original["aps"] as? [String: Any],
+              (aps["mutable-content"] as? Int) == 1,
+              let app = bundleID ?? Self.targetBundle(inPayload: json),
+              let extensionID = try ServiceExtensionHost.extensionIdentifier(appBundleID: app, udid: udid) else {
+            return nil
+        }
+        let serviced = try ServiceExtensionHost.service(
+            payload: Data(json.utf8), appBundleID: app, extensionID: extensionID, udid: udid
+        )
+        print("ran \(extensionID): \(Self.describe(serviced))")
+        if !serviced.attachments.isEmpty {
+            print("  \(serviced.attachments.count) attachment(s), not shown: " + serviced.attachments.map(\.url).joined(separator: ", "))
+        }
+        if serviced.isCommunication {
+            print("  a Communication Notification; the sender's avatar is not shown")
+        }
+        let payload = serviced.payload(replacing: original)
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private static func describe(_ content: ServicedContent) -> String {
+        [("title", content.title), ("subtitle", content.subtitle), ("body", content.body)]
+            .filter { !$0.1.isEmpty }
+            .map { "\($0.0) \"\($0.1)\"" }
+            .joined(separator: ", ")
+    }
+
+    static func targetBundle(inPayload json: String) -> String? {
+        (try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])?["Simulator Target Bundle"] as? String
     }
 
     /// The same code `--verify` uses on the input commands for "the device did not act on it".
