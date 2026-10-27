@@ -3,6 +3,16 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.4.4
+
+- `stupidsim notification` reads the banner a simulator is showing and acts on it by its text, not
+  its position: `show`, `open`, `expand`, `dismiss`, and `reply` to type and send a text reply.
+- `stupidsim push --verify` checks the banner shows the alert's text, or every `--expect`, and
+  prints it.
+- `stupidsim ui-tree --springboard` reads Notification Center, the lock screen and the home screen
+  while an app is in front, and `ui-tree --at x,y` reads whatever is on top at a point, such as a
+  notification's reply field.
+
 ## 0.4.3
 
 - `stupidsim push` sends a push notification to an app, from a payload file, standard input, or
