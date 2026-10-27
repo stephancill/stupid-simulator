@@ -3,6 +3,13 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.4.3
+
+- `stupidsim push` sends a push notification to an app, from a payload file, standard input, or
+  `--title` and `--body`. With `--verify` it fails unless a banner appears.
+- Dropping an `.apns` payload with a `Simulator Target Bundle` key onto a device window sends it as
+  a push notification.
+
 ## 0.4.2
 
 - A simulator opens in at most one window, even across `stupidsim view` runs and several copies of
