@@ -263,6 +263,43 @@ extension SimctlService {
 }
 
 extension SimctlService {
+    static func launchdJobsArguments(udid: String) -> [String] {
+        ["simctl", "spawn", udid, "launchctl", "list"]
+    }
+
+    /// The guest's SpringBoard, which draws banners, Notification Center and the lock screen.
+    static let springBoardLabel = "com.apple.SpringBoard"
+
+    /// Reads the pid from the guest's own launchd, so it belongs to this device even when several
+    /// are booted. Simulator processes are host processes, so the pid also names it on the Mac.
+    public func springBoardPID(udid: String) throws -> Int32 {
+        let arguments = Self.launchdJobsArguments(udid: udid)
+        let result = try ProcessRunner.run("/usr/bin/xcrun", arguments)
+        guard result.status == 0 else {
+            throw EngineError.simctl(
+                args: Array(arguments.dropFirst()),
+                code: result.status,
+                stderr: result.standardError
+            )
+        }
+        guard let pid = Self.pid(ofJob: Self.springBoardLabel, inLaunchctlList: result.standardOutput) else {
+            throw EngineError.capabilityUnavailable(name: "SpringBoard's process (it is not running)")
+        }
+        return pid
+    }
+
+    /// `launchctl list` prints `PID<tab>Status<tab>Label`, with `-` for a job that is not running.
+    static func pid(ofJob label: String, inLaunchctlList output: String) -> Int32? {
+        for line in output.split(separator: "\n") {
+            let columns = line.split(separator: "\t")
+            guard columns.count == 3, columns[2] == label else { continue }
+            return Int32(columns[0])
+        }
+        return nil
+    }
+}
+
+extension SimctlService {
     public enum ContainerKind: String, Sendable, CaseIterable {
         case app
         case data

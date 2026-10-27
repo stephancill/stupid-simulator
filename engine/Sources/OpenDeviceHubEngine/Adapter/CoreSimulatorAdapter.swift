@@ -361,7 +361,25 @@ public final class CoreSimulatorAdapter: SimulatorAdapter, @unchecked Sendable {
         return try PasteboardBridge(port: port)
     }
 
-    public func accessibilityTree(_ udid: String) throws -> AccessibilityElement {
+    public func accessibilityTree(_ udid: String, target: AccessibilityTarget) throws -> AccessibilityElement {
+        try accessibilityReader(udid, target: target).read()
+    }
+
+    public func accessibilityElement(_ udid: String, at shown: CGPoint) throws -> AccessibilityHit? {
+        try accessibilityReader(udid, target: .frontmost).element(at: shown)
+    }
+
+    public func notificationBanner(_ udid: String) throws -> NotificationBanner? {
+        let pid = try SimctlService().springBoardPID(udid: udid)
+        return try accessibilityReader(udid, target: .process(pid: pid)).banner()
+    }
+
+    public func performBannerAction(_ action: NotificationBannerAction, udid: String) throws {
+        let pid = try SimctlService().springBoardPID(udid: udid)
+        try accessibilityReader(udid, target: .process(pid: pid)).performBannerAction(action)
+    }
+
+    private func accessibilityReader(_ udid: String, target: AccessibilityTarget) throws -> AccessibilityTreeReader {
         lock.lock()
         defer { lock.unlock() }
 
@@ -377,7 +395,7 @@ public final class CoreSimulatorAdapter: SimulatorAdapter, @unchecked Sendable {
             )
         }
         _ = try FrameworkLoader.load(.accessibilityPlatformTranslation, from: xcode)
-        return try AccessibilityTreeReader(device: device).read()
+        return AccessibilityTreeReader(device: device, target: target)
     }
 
     public func setOrientation(_ orientation: DeviceOrientation, udid: String) throws {

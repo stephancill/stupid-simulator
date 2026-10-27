@@ -27,6 +27,27 @@ public struct AccessibilityElement: Codable, Sendable, Hashable {
     }
 }
 
+/// An element found by hit testing, with the screen its frame is measured against.
+public struct AccessibilityHit: Sendable, Hashable {
+    public var element: AccessibilityElement
+    /// The whole screen in the same points as the element's frame.
+    public var screen: CGRect
+
+    /// The centre in the normalized coordinates `tap` takes.
+    public func normalizedCenter(orientation: DeviceOrientation = .portrait) -> CGPoint? {
+        element.normalizedCenter(in: screen, orientation: orientation)
+    }
+}
+
+/// Whose tree to read.
+public enum AccessibilityTarget: Sendable, Hashable {
+    /// The app in front on the main display.
+    case frontmost
+    /// One guest process by its pid. SpringBoard draws notification banners, Notification Center
+    /// and the lock screen over the app in front, so they are only in its tree.
+    case process(pid: Int32)
+}
+
 // On Xcode 27 (27A266a), AXPTranslator traps on the main thread and when supportsDelegateTokens or
 // accessibilityEnabled is set. The work queue keeps reads off main and serializes the singleton.
 final class AccessibilityTreeReader: @unchecked Sendable {
@@ -34,18 +55,42 @@ final class AccessibilityTreeReader: @unchecked Sendable {
     private static let workQueue = DispatchQueue(label: "\(Brand.commandName).accessibility.work")
 
     private let device: any ODHSimDevice
+    private let target: AccessibilityTarget
     private let timeout: DispatchTimeInterval
 
-    init(device: any ODHSimDevice, timeout: DispatchTimeInterval = .seconds(2)) {
+    init(device: any ODHSimDevice, target: AccessibilityTarget = .frontmost, timeout: DispatchTimeInterval = .seconds(2)) {
         self.device = device
+        self.target = target
         self.timeout = timeout
     }
 
-    /// `async` and a wait, not `sync`, which may run the block on the calling main thread.
     func read() throws -> AccessibilityElement {
-        let handoff = Handoff<Result<AccessibilityElement, any Error>>()
+        try withRoot { [self] _, token, root in try element(from: root, token: token, depth: 0) }
+    }
+
+    /// Whatever is drawn on top at a point, normalized to the guest's rotated screen, with its
+    /// children. Reaches elements in processes other than the target, such as the reply field
+    /// InputUI draws over an expanded notification, which no app's tree contains.
+    func element(at shown: CGPoint) throws -> AccessibilityHit? {
+        try withRoot { [self] translator, token, root in
+            let screen = unsafeBitCast(root as AnyObject, to: (any ODHAXPMacPlatformElement).self).accessibilityFrame
+            let point = CGPoint(x: screen.minX + shown.x * screen.width, y: screen.minY + shown.y * screen.height)
+            guard let hit = translator.object(at: point, displayId: 0, bridgeDelegateToken: token) else { return nil }
+            try Self.setToken(token, on: hit)
+            return try translator.macPlatformElement(fromTranslation: hit).map {
+                AccessibilityHit(element: try element(from: $0, token: token, depth: 0), screen: screen)
+            }
+        }
+    }
+
+    /// Runs `body` on the work queue with the target's root element and the token its requests
+    /// need. `async` and a wait, not `sync`, which may run the block on the calling main thread.
+    func withRoot<Value>(
+        _ body: @escaping (_ translator: any ODHAXPTranslator, _ token: String, _ root: Any) throws -> Value
+    ) throws -> Value {
+        let handoff = Handoff<Result<Value, any Error>>()
         Self.workQueue.async { [self] in
-            handoff.set(Result { try readOnWorkQueue() })
+            handoff.set(Result { try withRootOnWorkQueue(body) })
         }
         guard let result = handoff.wait(timeout: .distantFuture) else {
             throw EngineError.privateCall(symbol: "AXPTranslator", message: "the read ended without a result")
@@ -53,7 +98,9 @@ final class AccessibilityTreeReader: @unchecked Sendable {
         return try result.get()
     }
 
-    private func readOnWorkQueue() throws -> AccessibilityElement {
+    private func withRootOnWorkQueue<Value>(
+        _ body: (_ translator: any ODHAXPTranslator, _ token: String, _ root: Any) throws -> Value
+    ) throws -> Value {
         let translator = try Self.translator()
         let token = UUID().uuidString
         // Held weakly by the translator, so this frame keeps it alive.
@@ -61,11 +108,24 @@ final class AccessibilityTreeReader: @unchecked Sendable {
         translator.setBridgeTokenDelegate(delegate)
         defer { translator.setBridgeTokenDelegate(nil) }
 
-        guard let translation = translator.frontmostApplication(withDisplayId: 0, bridgeDelegateToken: token) else {
-            throw EngineError.privateCall(
-                symbol: "-[AXPTranslator frontmostApplicationWithDisplayId:bridgeDelegateToken:]",
-                message: "no app answered. The device may still be starting, or locked with nothing in front"
-            )
+        let translation: Any
+        switch target {
+        case .frontmost:
+            guard let frontmost = translator.frontmostApplication(withDisplayId: 0, bridgeDelegateToken: token) else {
+                throw EngineError.privateCall(
+                    symbol: "-[AXPTranslator frontmostApplicationWithDisplayId:bridgeDelegateToken:]",
+                    message: "no app answered. The device may still be starting, or locked with nothing in front"
+                )
+            }
+            translation = frontmost
+        case .process(let pid):
+            guard let process = translator.translationApplicationObject(forPid: pid) else {
+                throw EngineError.privateCall(
+                    symbol: "-[AXPTranslator translationApplicationObjectForPid:]",
+                    message: "process \(pid) did not answer"
+                )
+            }
+            translation = process
         }
         try Self.setToken(token, on: translation)
         guard let root = translator.macPlatformElement(fromTranslation: translation) else {
@@ -74,10 +134,10 @@ final class AccessibilityTreeReader: @unchecked Sendable {
                 message: "no element for the frontmost app"
             )
         }
-        return try element(from: root, token: token, depth: 0)
+        return try body(translator, token, root)
     }
 
-    private func element(from object: Any, token: String, depth: Int) throws -> AccessibilityElement {
+    func element(from object: Any, token: String, depth: Int) throws -> AccessibilityElement {
         try AccessibilitySelectorCheck.require(on: object as AnyObject, selectors: [
             "translation", "accessibilityChildren", "accessibilityRole", "accessibilityRoleDescription",
             "accessibilityLabel", "accessibilityTitle", "accessibilityIdentifier", "accessibilityValue",
@@ -105,7 +165,7 @@ final class AccessibilityTreeReader: @unchecked Sendable {
         )
     }
 
-    private static func setToken(_ token: String, on translation: Any) throws {
+    static func setToken(_ token: String, on translation: Any) throws {
         try AccessibilitySelectorCheck.require(on: translation as AnyObject, selectors: ["setBridgeDelegateToken:"])
         unsafeBitCast(translation as AnyObject, to: (any ODHAXPTranslationObject).self)
             .setBridgeDelegateToken(token)
@@ -122,6 +182,7 @@ final class AccessibilityTreeReader: @unchecked Sendable {
         }
         try AccessibilitySelectorCheck.require(on: shared as AnyObject, selectors: [
             "setBridgeTokenDelegate:", "frontmostApplicationWithDisplayId:bridgeDelegateToken:",
+            "translationApplicationObjectForPid:", "objectAtPoint:displayId:bridgeDelegateToken:",
             "macPlatformElementFromTranslation:",
         ])
         return unsafeBitCast(shared as AnyObject, to: (any ODHAXPTranslator).self)
@@ -193,7 +254,7 @@ final class AccessibilityBridgeDelegate: NSObject {
     }
 }
 
-private final class Handoff<Value>: @unchecked Sendable {
+final class Handoff<Value>: @unchecked Sendable {
     private let lock = NSLock()
     private let semaphore = DispatchSemaphore(value: 0)
     private var value: Value?

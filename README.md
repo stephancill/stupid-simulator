@@ -104,7 +104,7 @@ audits. Link or copy the folder into your agent's skills directory.
 - **Debug helpers**: slow animations, shake, simulated memory warning, the system log and app data
   in the Finder, and a click to frame latency overlay.
 - **A command line tool**: `stupidsim` drives a simulator from a script: tap, swipe, pinch, type,
-  buttons, rotation, push notifications. `stupidsim ui-tree` prints the accessibility tree of the app in front, each element
+  buttons, rotation, push notifications and acting on their banners. `stupidsim ui-tree` prints the accessibility tree of the app in front, each element
   with the coordinates `tap` takes. One menu item puts it on your `PATH`.
 
 <details>
@@ -153,13 +153,14 @@ or pasteboard sync has overwritten it.
 | `type` | `stupidsim type A1B2C3D4 "Hello@example.com!"` |
 | `key` | `stupidsim key A1B2C3D4 delete --repeat 3` or `stupidsim key A1B2C3D4 cmd+a delete` |
 | `push` | `stupidsim push booted --bundle-id com.example.App --title Hi --body There --verify` |
+| `notification` | `stupidsim notification booted reply "On my way" --match There` |
 | `paste` | `echo hello \| stupidsim paste A1B2C3D4` |
 | `copy` | `stupidsim copy A1B2C3D4` |
 | `button` | `stupidsim button A1B2C3D4 home` |
 | `rotate` | `stupidsim rotate A1B2C3D4 landscapeLeft` |
 | `home-swipe` | `stupidsim home-swipe A1B2C3D4` |
 | `app-switcher` | `stupidsim app-switcher A1B2C3D4` |
-| `ui-tree` | `stupidsim ui-tree A1B2C3D4 --labelled` |
+| `ui-tree` | `stupidsim ui-tree A1B2C3D4 --labelled`, `--springboard` or `--at 0.88,0.93` |
 | `screenshot` | `stupidsim screenshot booted -o screen.png` |
 
 </details>

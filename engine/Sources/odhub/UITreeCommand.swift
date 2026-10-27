@@ -23,9 +23,36 @@ struct UITree: AsyncParsableCommand {
     @Flag(help: "Only print elements that carry a label, title, identifier or value.")
     var labelled = false
 
+    @Flag(help: "Read SpringBoard instead of the app in front: notification banners, Notification Center, the lock screen and the home screen.")
+    var springboard = false
+
+    @Option(help: ArgumentHelp("Print only what is drawn on top at this point, in the normalized coordinates `tap` takes, whichever process draws it: for example the Send button of a notification reply.", valueName: "x,y"), transform: UITree.point)
+    var at: CGPoint?
+
+    func validate() throws {
+        if at != nil, springboard {
+            throw ValidationError("--at reads whatever is on top, so it does not take --springboard.")
+        }
+    }
+
+    static func point(_ argument: String) throws -> CGPoint {
+        let parts = argument.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        guard parts.count == 2, parts.allSatisfy({ (0...1).contains($0) }) else {
+            throw ValidationError("--at takes x,y between 0 and 1, such as 0.5,0.9.")
+        }
+        return CGPoint(x: parts[0], y: parts[1])
+    }
+
     func run() async throws {
         let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
-        let root = try adapter.accessibilityTree(udid)
+        if let at {
+            try await printElement(at: at, adapter: adapter)
+            return
+        }
+        let target: AccessibilityTarget = springboard
+            ? .process(pid: try SimctlService().springBoardPID(udid: udid))
+            : .frontmost
+        let root = try adapter.accessibilityTree(udid, target: target)
 
         if json {
             let encoder = JSONEncoder()
@@ -33,13 +60,23 @@ struct UITree: AsyncParsableCommand {
             print(String(decoding: try encoder.encode(root), as: UTF8.self))
             return
         }
-        let report = try await adapter.displayReport(udid)
-        // Accessibility's display 0 denotes the main screen; CoreDevice uses its own display IDs.
-        guard report.isSettled, let display = report.activeIntegrated,
-              let orientation = DeviceOrientation.allCases.first(where: { $0.degrees == display.currentRotation }) else {
-            throw EngineError.capabilityUnavailable(name: "the accessibility display's rotation")
-        }
+        let orientation = try await DeviceOrientation.current(adapter, udid: udid)
         printTree(root, screen: root.frame, orientation: orientation, depth: 0)
+    }
+
+    private func printElement(at native: CGPoint, adapter: any SimulatorAdapter) async throws {
+        let orientation = try await DeviceOrientation.current(adapter, udid: udid)
+        let shown = CoordinateMapper.shownPoint(fromPortraitNative: native, orientation: orientation)
+        guard let hit = try adapter.accessibilityElement(udid, at: shown) else {
+            throw EngineError.capabilityUnavailable(name: "an accessible element at \(native.x),\(native.y)")
+        }
+        if json {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            print(String(decoding: try encoder.encode(hit.element), as: UTF8.self))
+            return
+        }
+        printTree(hit.element, screen: hit.screen, orientation: orientation, depth: 0)
     }
 
     private func printTree(_ element: AccessibilityElement, screen: CGRect, orientation: DeviceOrientation, depth: Int) {

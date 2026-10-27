@@ -3,6 +3,44 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## Notification banners, SpringBoard's tree and hit testing
+
+- `ui-tree` read only `-[AXPTranslator frontmostApplicationWithDisplayId:bridgeDelegateToken:]`, so
+  anything another process draws over the app was missing: banners (SpringBoard), Notification
+  Center and the lock screen when an app is in front, and the reply field of an expanded
+  notification (InputUI). Two more `AXPTranslator` calls, checked before use like the others:
+  - `translationApplicationObjectForPid:` reads one guest process. `ui-tree --springboard` passes
+    SpringBoard's pid, read from the guest's own `launchctl list` (`com.apple.SpringBoard`), so it
+    belongs to that device when several are booted. Guest processes are host processes, so the pid
+    is valid on the Mac too.
+  - `objectAtPoint:displayId:bridgeDelegateToken:` hit tests a point in the guest's points and
+    answers whatever is on top, whichever process draws it. `ui-tree --at x,y` uses it.
+- A banner in SpringBoard's tree is an `AXGroup` labelled "Notification" with no children. Hit
+  testing its centre answers `NotificationShortLookView`, whose label is the app, when, title,
+  subtitle and body joined by ", ", with the custom actions More and Dismiss. Found by that
+  identifier rather than the localized group label.
+- `stupidsim notification <udid> show|open|expand|dismiss|reply` waits for a banner by its text, then
+  acts. Expand and dismiss perform the banner's `NSAccessibilityCustomAction`s through their
+  handlers. `accessibilityPerformPress` on the banner returns YES but does nothing, so open taps the
+  banner's frame. Each action is checked by the banner leaving the screen. Reply expands, finds the
+  InputUI field by hit testing up from the bottom, types, hit tests along the field's row for the
+  button, taps it, and checks the field closed.
+- `push --verify` now waits for a banner containing the alert's title, subtitle and body (or every
+  `--expect`) and prints it, instead of the screen-change check, which passed for any banner.
+- Verified on Xcode 27 (27A266a) with an iOS 27.0 device and an app with a text-input reply
+  category: show, expand, dismiss and reply (SpringBoard logged the reply action with the typed
+  text) from the home screen; open from the home screen cold-launched the app through the default
+  action; `--expect` failed with exit 2 on a mismatch and printed the banner. A `mutable-content`
+  push did not start the app's Notification Service Extension. Not checked: landscape, and a
+  category with several actions, where expanding shows buttons rather than the field.
+- Taps on notifications seemed not to open the app for two reasons. Banner taps did open it, but
+  the app under test crashed on launch (a `nonisolated` async `didReceive` finishing off the main
+  thread). In Notification Center and on the lock screen, SpringBoard answers a tap on a row by
+  hinting a side swipe instead of running the default action (`shouldHintForDefault hinting notCape
+  - doesn'tForceDefault`), and the row's View accessibility action does the same. Swiping the row
+  right runs the default action and launches the app. Verified on Xcode 27 (27A266a) with an iOS
+  27.0 device.
+
 ## Push notifications
 
 - `stupidsim push <udid> [payload] [--bundle-id] [--title --body] [--verify]` and dropping an `.apns`
@@ -14,9 +52,8 @@ v0.2.0), and what has been verified where. Newest first.
   Xcode 27 it also refuses a push with no visible content (a silent `content-available` push, UN
   error 1401), and an app that is not installed fails with "Source is not authorized" (UN error
   2003), which the CLI turns into a question about whether the app is installed.
-- `--verify` uses the screen-change check rather than `ui-tree`: the banner belongs to SpringBoard, so
-  it is not in the front app's accessibility tree. When nothing changes, the advice is about
-  notification permission and foreground presentation rather than restarting the simulator.
+- `--verify` first used the screen-change check, since the banner is not in the front app's tree. It
+  now reads the banner itself; see the section above.
 - Verified on Xcode 27 (27A266a) with an iOS 27.0 device: an alert from `--title/--body`, a file with
   a target bundle key and a badge, and standard input were all delivered, and `--verify` saw the
   banner; the not installed and silent cases failed with the errors above. The drop path is unit

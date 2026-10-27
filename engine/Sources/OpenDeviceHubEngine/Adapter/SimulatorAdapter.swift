@@ -208,8 +208,15 @@ public protocol SimulatorAdapter: Sendable {
     func setKeyboardLanguage(_ language: String, udid: String) throws
     /// Opens the clipboard link to a booted device.
     func openPasteboard(_ udid: String) throws -> any PasteboardSession
-    /// Reads the accessibility tree of the app in front on a booted device.
-    func accessibilityTree(_ udid: String) throws -> AccessibilityElement
+    /// Reads the accessibility tree of the app in front, or of one process, on a booted device.
+    func accessibilityTree(_ udid: String, target: AccessibilityTarget) throws -> AccessibilityElement
+    /// What is drawn on top at a point normalized to the guest's rotated screen, whichever process
+    /// draws it, or nil when nothing accessible is there.
+    func accessibilityElement(_ udid: String, at shown: CGPoint) throws -> AccessibilityHit?
+    /// The notification banner on screen, or nil when there is none.
+    func notificationBanner(_ udid: String) throws -> NotificationBanner?
+    /// Performs one of the banner's accessibility actions, failing when there is no banner.
+    func performBannerAction(_ action: NotificationBannerAction, udid: String) throws
     /// Watches every device in the set, so a window learns that its device has gone or come back
     /// without asking.
     func watchDeviceStates() throws -> any DeviceNotifier
@@ -247,8 +254,25 @@ extension SimulatorAdapter {
 
     public func forgetConnections(_ udid: String) {}
 
+    /// The app in front, which is what `ui-tree` reads unless told otherwise.
     public func accessibilityTree(_ udid: String) throws -> AccessibilityElement {
+        try accessibilityTree(udid, target: .frontmost)
+    }
+
+    public func accessibilityTree(_ udid: String, target: AccessibilityTarget) throws -> AccessibilityElement {
         throw EngineError.capabilityUnavailable(name: "the accessibility tree of \(udid)")
+    }
+
+    public func accessibilityElement(_ udid: String, at shown: CGPoint) throws -> AccessibilityHit? {
+        throw EngineError.capabilityUnavailable(name: "the accessibility tree of \(udid)")
+    }
+
+    public func notificationBanner(_ udid: String) throws -> NotificationBanner? {
+        throw EngineError.capabilityUnavailable(name: "notification banners on \(udid)")
+    }
+
+    public func performBannerAction(_ action: NotificationBannerAction, udid: String) throws {
+        throw EngineError.capabilityUnavailable(name: "notification banners on \(udid)")
     }
 
     public func displayReport(_ udid: String) async throws -> DisplayReport {

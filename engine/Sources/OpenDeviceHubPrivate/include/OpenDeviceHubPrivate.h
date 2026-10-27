@@ -193,6 +193,13 @@
 /// An `AXPTranslationObject` for the app in front on that display, or nil while nothing answers.
 - (nullable id)frontmostApplicationWithDisplayId:(unsigned int)displayId
                              bridgeDelegateToken:(NSString *_Nonnull)token;
+/// An `AXPTranslationObject` for one process in the guest, whether or not it is in front.
+- (nullable id)translationApplicationObjectForPid:(int)pid;
+/// An `AXPTranslationObject` for whatever is drawn on top at a point in the guest's points,
+/// whichever process draws it.
+- (nullable id)objectAtPoint:(CGPoint)point
+                   displayId:(unsigned int)displayId
+         bridgeDelegateToken:(NSString *_Nonnull)token;
 /// Returns an AXPMacPlatformElement.
 - (nullable id)macPlatformElementFromTranslation:(id _Nonnull)translation;
 @end
@@ -211,6 +218,8 @@
 @property (nonatomic, readonly, nullable) NSString *accessibilityIdentifier;
 @property (nonatomic, readonly, nullable) id accessibilityValue;
 @property (nonatomic, readonly) CGRect accessibilityFrame;
+/// `NSAccessibilityCustomAction`s, such as a notification's More and Dismiss.
+@property (nonatomic, readonly, nullable) NSArray *accessibilityCustomActions;
 @end
 
 @protocol ODHSimServiceContext <NSObject>

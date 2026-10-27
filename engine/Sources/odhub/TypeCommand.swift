@@ -25,13 +25,18 @@ struct Type: AsyncParsableCommand {
     }
 
     private func send() async throws {
-        guard let keys = KeyboardMap.keys(forTyping: text) else {
-            throw ValidationError("That text contains a character with no key on a US keyboard.")
-        }
         let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
         let session = try adapter.openInput(udid)
         defer { session.close() }
+        let count = try await Self.type(text, session: session, keyMilliseconds: keyMilliseconds)
+        print("typed \(count) keys")
+    }
 
+    /// Shared with `notification reply`. Returns how many keys were pressed.
+    static func type(_ text: String, session: any InputSession, keyMilliseconds: Int) async throws -> Int {
+        guard let keys = KeyboardMap.keys(forTyping: text) else {
+            throw ValidationError("That text contains a character with no key on a US keyboard.")
+        }
         for key in keys {
             if key.shifted {
                 try await session.key(KeyEvent(phase: .down, usage: KeyboardMap.leftShiftUsage))
@@ -44,6 +49,6 @@ struct Type: AsyncParsableCommand {
             }
             try await Task.sleep(for: .milliseconds(keyMilliseconds))
         }
-        print("typed \(keys.count) keys")
+        return keys.count
     }
 }

@@ -55,6 +55,24 @@ public enum CoordinateMapper {
         }
     }
 
+    /// The inverse of `portraitNativePoint`: where a point `tap` takes appears in the guest's own,
+    /// rotated, screen.
+    public static func shownPoint(
+        fromPortraitNative native: CGPoint,
+        orientation: DeviceOrientation
+    ) -> CGPoint {
+        switch orientation {
+        case .portrait:
+            return native
+        case .landscapeLeft:
+            return CGPoint(x: 1 - native.y, y: native.x)
+        case .portraitUpsideDown:
+            return CGPoint(x: 1 - native.x, y: 1 - native.y)
+        case .landscapeRight:
+            return CGPoint(x: native.y, y: 1 - native.x)
+        }
+    }
+
     public static func normalize(
         viewPoint: CGPoint,
         viewSize: CGSize,

@@ -51,6 +51,7 @@ stupidsim ui-tree <udid> --labelled            # confirm you are where you meant
 | Need | Command |
 |---|---|
 | Accessibility tree | `stupidsim ui-tree <udid> [--labelled] [--json]` (`--json` frames are in points) |
+| System UI, other processes | `stupidsim ui-tree <udid> --springboard` (Notification Center, lock screen, home screen), `stupidsim ui-tree <udid> --at 0.88,0.93` (whatever is on top at a point) |
 | Tap | `stupidsim tap <udid> --x X --y Y [--hold-milliseconds 120] [--verify]` |
 | Swipe / scroll | `stupidsim swipe <udid> --from-x 0.5 --from-y 0.75 --to-x 0.5 --to-y 0.3 [--verify]` |
 | Pinch | `stupidsim pinch <udid> --from 0.2 --to 0.7 [--x --y --angle]` |
@@ -60,10 +61,51 @@ stupidsim ui-tree <udid> --labelled            # confirm you are where you meant
 | Show/hide on-screen keyboard | `stupidsim button <udid> software-keyboard` (needs a focused text field) |
 | Home gesture, app switcher | `stupidsim home-swipe <udid>`, `stupidsim app-switcher <udid>` |
 | Rotate | `stupidsim rotate <udid> portrait\|landscapeLeft\|landscapeRight\|portraitUpsideDown` |
-| Push notification | `stupidsim push <udid> payload.apns [--bundle-id ID] [--verify]`, or `--bundle-id ID --title T --body B` (the app must be installed; silent pushes are refused) |
+| Push notification | `stupidsim push <udid> payload.apns [--bundle-id ID] [--verify [--expect TEXT]]`, or `--bundle-id ID --title T --body B` (the app must be installed; silent pushes are refused) |
+| Act on a banner | `stupidsim notification <udid> show\|open\|expand\|dismiss [--match TEXT]`, `stupidsim notification <udid> reply 'text' [--match TEXT]` |
 | Pasteboard | `stupidsim paste <udid> 'text'` (reads it back, fails if overwritten), `stupidsim copy <udid>` |
 | Screenshot | `stupidsim screenshot <udid> [-o file.png]` (prints the path) |
 | Windows for people | `stupidsim view <udid>` or open the app |
+
+## Testing push notifications
+
+```bash
+stupidsim push <udid> payload.apns --verify                 # prints the banner's text
+stupidsim push <udid> --bundle-id ID --title T --body B --verify --expect "text the app should show"
+stupidsim notification <udid> reply 'On my way' --match T  # expand, type, tap Send, check it closed
+stupidsim notification <udid> open --match T               # tap it: opens the app, runs didReceive
+```
+
+- **`push --verify` reads the banner** and fails (exit 2) unless it contains the alert's title,
+  subtitle and body, or every `--expect` in their place. A banner the app in front chose not to
+  present (`willPresent` returning no `.banner`) fails it too.
+- **Act on banners with `notification`, not coordinates.** It waits for the banner by its text and
+  acts through accessibility (expand, dismiss) or a tap on the banner's own frame (open), so it does
+  not matter how long ago the push arrived. A late `tap --y 0.1` lands on the home screen instead,
+  and a late long press starts icon editing.
+- **Banners are not in `ui-tree`.** SpringBoard draws them over the app; `notification show` reads
+  them. Notification Center and the lock screen are in `ui-tree --springboard`, as `ListCell`
+  buttons (open Notification Center with `swipe --from-x 0.3 --from-y 0.005 --to-x 0.3 --to-y 0.6`).
+- **Tapping a Notification Center or lock-screen row does not open the app** on iOS 27: SpringBoard
+  only hints a side swipe ("shouldHintForDefault hinting notCape"). **Swipe the row right to open
+  it**: `swipe --from-x 0.15 --from-y Y --to-x 0.85 --to-y Y` at the row's `y`. This is how to test a
+  cold start from a notification. A row in a group expands the group on the first tap.
+- **The reply field and its Send button are in no app's tree** (InputUI draws them). `notification
+  reply` finds them by hit testing; by hand, `ui-tree --at x,y` reads what is at a point. Return in
+  the field adds a newline rather than sending. `reply` needs a category whose only action is a text
+  input, which opens the field straight away.
+- **A Notification Service Extension does not run** for `stupidsim push` (or `simctl push`): the
+  banner shows the payload as sent, `mutable-content` or not. NSE output is only testable on a
+  device, or with real APNs delivery to a simulator from a build signed with a team.
+- **Ad-hoc simulator builds get no APNs device token.** `stupid-app run --simulator` signs without a
+  team, so the app has no `aps-environment` (the simulator refuses to launch a team-less signature
+  that has it), `registerForRemoteNotifications` gets no token, and SpringBoard logs "No valid
+  'aps-environment' entitlement". Only `stupidsim push` reaches such an app.
+- **If `notification open` passes but the app is not in front**, it probably crashed handling the
+  response. Look in `~/Library/Logs/DiagnosticReports/` for the app's newest `.ips`. A `nonisolated`
+  async `userNotificationCenter(_:didReceive:)` crashes this way on a cold launch: UIKit asserts in
+  `_performBlockAfterCATransactionCommitSynchronizes:` when the response finishes off the main
+  thread.
 
 ## What we learned the hard way
 
@@ -86,7 +128,8 @@ stupidsim ui-tree <udid> --labelled            # confirm you are where you meant
 - **Quitting Device Hub shuts down every simulator it has open**, as Simulator.app did. Ask before
   quitting it on someone's machine. `defaults write com.apple.dt.Devices shutdownStartedDevicesOnQuit
   -bool false` (with Device Hub quit) stops that.
-- **`ui-tree` needs an app in front.** On a locked device or straight after boot it fails with "no
+- **`ui-tree` reads only the app in front**, not banners or other system UI drawn over it; use
+  `--springboard` or `--at x,y` for those. **It needs an app in front.** On a locked device or straight after boot it fails with "no
   app answered". Unlock (`button home`) or launch an app (`xcrun simctl launch <udid> <bundle-id>`),
   then retry.
 - **Wait for launches to settle** before reading the screen. `simctl launch` returns before the
