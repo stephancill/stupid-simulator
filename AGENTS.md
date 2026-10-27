@@ -43,9 +43,8 @@ and agents.
 - Unit tests: `swift test --package-path engine`.
 - Integration tests need a booted simulator and are gated behind `ODH_INTEGRATION`.
 - App bundle: `scripts/build-app.sh debug`.
-- After changing input code, verify on a real booted simulator on both an iOS 27 and an iOS 26
-  runtime: check the effect with `ui-tree`, a screenshot or `--verify`, not the command's exit
-  status. Quit Device Hub before testing the pasteboard (it overwrites device pasteboards), and
+- After changing input code, verify on a real booted simulator: check the effect with `ui-tree`, a
+  screenshot or `--verify`, not the command's exit status. Quit Device Hub before testing the pasteboard (it overwrites device pasteboards), and
   note that quitting it shuts down the simulators it has open.
 
 ## Coding style
