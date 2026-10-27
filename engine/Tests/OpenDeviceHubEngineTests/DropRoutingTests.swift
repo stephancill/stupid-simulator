@@ -32,6 +32,15 @@ final class DropRoutingTests: XCTestCase {
         XCTAssertEqual(DropRouting.actions(for: [url("/tmp/Thing.APP")]), [.installApp(url("/tmp/Thing.APP"))])
     }
 
+    func testAnAPNSFileIsSentAsAPush() {
+        XCTAssertEqual(DropRouting.actions(for: [url("/tmp/Hello.apns")]), [.sendPush(url("/tmp/Hello.apns"))])
+        XCTAssertEqual(DropRouting.actions(for: [url("/tmp/Hello.APNS")]), [.sendPush(url("/tmp/Hello.APNS"))])
+    }
+
+    func testAJSONFileIsNotTakenForAPush() {
+        XCTAssertEqual(DropRouting.actions(for: [url("/tmp/data.json")]), [.unsupported(url("/tmp/data.json"))])
+    }
+
     func testAnUnknownFileIsReportedRatherThanIgnored() {
         XCTAssertEqual(DropRouting.actions(for: [url("/tmp/notes.txt")]), [.unsupported(url("/tmp/notes.txt"))])
     }
@@ -45,6 +54,7 @@ final class DropRoutingTests: XCTestCase {
         XCTAssertFalse(DropAction.installApp(url("/tmp/a.app")).needsConfirmation)
         XCTAssertFalse(DropAction.addMedia([url("/tmp/a.png")]).needsConfirmation)
         XCTAssertFalse(DropAction.openURL("https://example.com").needsConfirmation)
+        XCTAssertFalse(DropAction.sendPush(url("/tmp/a.apns")).needsConfirmation)
     }
 }
 
@@ -65,6 +75,14 @@ final class DropArgumentTests: XCTestCase {
         XCTAssertEqual(
             SimctlService.openURLArguments(udid: "ABC", url: "https://example.com"),
             ["simctl", "openurl", "ABC", "https://example.com"]
+        )
+        XCTAssertEqual(
+            SimctlService.pushArguments(udid: "ABC", bundleID: "com.example.App"),
+            ["simctl", "push", "ABC", "com.example.App", "-"]
+        )
+        XCTAssertEqual(
+            SimctlService.pushArguments(udid: "ABC", bundleID: nil),
+            ["simctl", "push", "ABC", "-"]
         )
     }
 }

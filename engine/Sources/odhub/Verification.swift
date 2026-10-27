@@ -25,7 +25,15 @@ struct Verification: ParsableArguments {
         }
     }
 
-    func check(_ udid: String, _ input: () async throws -> Void) async throws {
+    static let inputAdvice = "If no input works on this simulator, restart it."
+
+    /// `advice` follows the failure when the screen does not change, since what to try next depends
+    /// on what was sent.
+    func check(
+        _ udid: String,
+        advice: String = Verification.inputAdvice,
+        _ input: () async throws -> Void
+    ) async throws {
         guard verify else {
             try await input()
             return
@@ -61,7 +69,7 @@ struct Verification: ParsableArguments {
         } while Date() < deadline
         FileHandle.standardError.write(Data("""
             the screen did not change within \(verifyTimeout) s, so the device may not have acted on the \
-            input. If no input works on this simulator, restart it.
+            input. \(advice)
 
             """.utf8))
         throw ExitCode(Self.unchangedExitCode)

@@ -60,6 +60,7 @@ stupidsim ui-tree <udid> --labelled            # confirm you are where you meant
 | Show/hide on-screen keyboard | `stupidsim button <udid> software-keyboard` (needs a focused text field) |
 | Home gesture, app switcher | `stupidsim home-swipe <udid>`, `stupidsim app-switcher <udid>` |
 | Rotate | `stupidsim rotate <udid> portrait\|landscapeLeft\|landscapeRight\|portraitUpsideDown` |
+| Push notification | `stupidsim push <udid> payload.apns [--bundle-id ID] [--verify]`, or `--bundle-id ID --title T --body B` (the app must be installed; silent pushes are refused) |
 | Pasteboard | `stupidsim paste <udid> 'text'` (reads it back, fails if overwritten), `stupidsim copy <udid>` |
 | Screenshot | `stupidsim screenshot <udid> [-o file.png]` (prints the path) |
 | Windows for people | `stupidsim view <udid>` or open the app |

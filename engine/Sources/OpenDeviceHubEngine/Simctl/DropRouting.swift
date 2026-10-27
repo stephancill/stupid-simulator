@@ -7,6 +7,7 @@ public enum DropAction: Sendable, Hashable {
     case addMedia([URL])
     case addRootCertificate(URL)
     case openURL(String)
+    case sendPush(URL)
     case unsupported(URL)
 
     /// Adding a root certificate changes what the device trusts, so it is confirmed first.
@@ -22,6 +23,9 @@ public enum DropRouting {
         "mov", "mp4", "m4v", "vcf",
     ]
     static let certificateExtensions: Set<String> = ["cer", "pem", "der", "crt"]
+    /// The extension Simulator.app took for push payloads. A `.json` file is not taken, since most
+    /// are not payloads.
+    static let pushExtension = "apns"
 
     /// Media files are grouped into one action, since `simctl addmedia` takes several paths, while
     /// everything else is decided per file.
@@ -35,6 +39,8 @@ public enum DropRouting {
                 actions.append(.installApp(url))
             } else if certificateExtensions.contains(ext) {
                 actions.append(.addRootCertificate(url))
+            } else if ext == pushExtension {
+                actions.append(.sendPush(url))
             } else if mediaExtensions.contains(ext) {
                 media.append(url)
             } else {

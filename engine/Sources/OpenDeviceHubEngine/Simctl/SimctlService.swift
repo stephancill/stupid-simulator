@@ -208,9 +208,14 @@ extension SimctlService {
         ["simctl", "openurl", udid, url]
     }
 
+    /// A dropped payload names its app with a top-level `Simulator Target Bundle` key, which simctl
+    /// reads itself and complains about by name when it is missing.
     public func perform(_ action: DropAction, udid: String) throws {
         let arguments: [String]
         switch action {
+        case .sendPush(let file):
+            try push(String(contentsOf: file, encoding: .utf8), bundleID: nil, udid: udid)
+            return
         case .installApp(let app):
             arguments = Self.installArguments(udid: udid, app: app)
         case .addMedia(let files):
@@ -224,6 +229,29 @@ extension SimctlService {
         }
 
         let result = try ProcessRunner.run("/usr/bin/xcrun", arguments)
+        guard result.status == 0 else {
+            throw EngineError.simctl(
+                args: Array(arguments.dropFirst()),
+                code: result.status,
+                stderr: result.standardError
+            )
+        }
+    }
+}
+
+extension SimctlService {
+    /// The payload goes on standard input. simctl checks it itself, and names the problem: a
+    /// missing `aps` key, more than 4096 bytes, no bundle identifier, or an app that is not
+    /// installed ("Source is not authorized"). Verified on Xcode 27 (27A266a).
+    static func pushArguments(udid: String, bundleID: String?) -> [String] {
+        ["simctl", "push", udid] + (bundleID.map { [$0] } ?? []) + ["-"]
+    }
+
+    /// Delivers a simulated remote notification. Only ordinary app pushes are supported; simctl
+    /// refuses VoIP, complication and file provider pushes.
+    public func push(_ payload: String, bundleID: String?, udid: String) throws {
+        let arguments = Self.pushArguments(udid: udid, bundleID: bundleID)
+        let result = try ProcessRunner.run("/usr/bin/xcrun", arguments, standardInput: payload)
         guard result.status == 0 else {
             throw EngineError.simctl(
                 args: Array(arguments.dropFirst()),

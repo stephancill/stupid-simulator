@@ -13,8 +13,8 @@ Things the classic Simulator had, or that a simulator should simply be able to d
 
 - **Location**: a search, GPX routes, and per-project saved places. Scenarios, your own coordinates
   and clearing the location already work.
-- **Push notifications**: send a payload to an app, with a saved library of them and templates for
-  the fiddly parts.
+- **Push notifications**: a saved library of payloads and templates for the fiddly parts. Sending
+  one from `stupidsim push` or by dropping an `.apns` file already works.
 - **Biometrics**: enrol, match and fail a match for Face ID and Touch ID.
 - **Device and runtime management**: rename and delete simulators, and install runtimes, without
   going back to Xcode. Creating and erasing already work.

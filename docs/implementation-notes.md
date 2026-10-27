@@ -3,6 +3,25 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## Push notifications
+
+- `stupidsim push <udid> [payload] [--bundle-id] [--title --body] [--verify]` and dropping an `.apns`
+  file on a device window both go through `SimctlService.push`, which hands the payload to
+  `simctl push` on standard input. `.json` drops are not taken as pushes, since most JSON files are
+  not payloads.
+- simctl validates the payload itself and names the problem, so nothing is checked twice: a missing
+  `aps` key, more than 4096 bytes, no bundle identifier and no `Simulator Target Bundle` key. On
+  Xcode 27 it also refuses a push with no visible content (a silent `content-available` push, UN
+  error 1401), and an app that is not installed fails with "Source is not authorized" (UN error
+  2003), which the CLI turns into a question about whether the app is installed.
+- `--verify` uses the screen-change check rather than `ui-tree`: the banner belongs to SpringBoard, so
+  it is not in the front app's accessibility tree. When nothing changes, the advice is about
+  notification permission and foreground presentation rather than restarting the simulator.
+- Verified on Xcode 27 (27A266a) with an iOS 27.0 device: an alert from `--title/--body`, a file with
+  a target bundle key and a badge, and standard input were all delivered, and `--verify` saw the
+  banner; the not installed and silent cases failed with the errors above. The drop path is unit
+  tested for routing but was not exercised by dragging a file by hand.
+
 ## One window per simulator across processes
 
 - `DeviceWindowManager` already kept one window per device, but only within its own process, and

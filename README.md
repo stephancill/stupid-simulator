@@ -97,13 +97,14 @@ audits. Link or copy the folder into your agent's skills directory.
 - **Settings**: whether closing a window shuts the device down, whether launching opens the
   simulator you had last, where captures go, whether screenshots are saved to the clipboard instead,
   whether pasteboards stay in sync, and which app opens device links.
-- **Drag and drop**: drop a file or a link onto a device to open it there.
+- **Drag and drop**: drop a file or a link onto a device to open it there, or an `.apns` payload
+  with a `Simulator Target Bundle` key to send it as a push notification.
 - **Follows the device**: shut a simulator down from anywhere and its window says so and offers to
   start it again; boot it and the window reattaches on its own.
 - **Debug helpers**: slow animations, shake, simulated memory warning, the system log and app data
   in the Finder, and a click to frame latency overlay.
 - **A command line tool**: `stupidsim` drives a simulator from a script: tap, swipe, pinch, type,
-  buttons, rotation. `stupidsim ui-tree` prints the accessibility tree of the app in front, each element
+  buttons, rotation, push notifications. `stupidsim ui-tree` prints the accessibility tree of the app in front, each element
   with the coordinates `tap` takes. One menu item puts it on your `PATH`.
 
 <details>
@@ -151,6 +152,7 @@ or pasteboard sync has overwritten it.
 | `pinch` | `stupidsim pinch A1B2C3D4 --from 0.2 --to 0.7` |
 | `type` | `stupidsim type A1B2C3D4 "Hello@example.com!"` |
 | `key` | `stupidsim key A1B2C3D4 delete --repeat 3` or `stupidsim key A1B2C3D4 cmd+a delete` |
+| `push` | `stupidsim push booted --bundle-id com.example.App --title Hi --body There --verify` |
 | `paste` | `echo hello \| stupidsim paste A1B2C3D4` |
 | `copy` | `stupidsim copy A1B2C3D4` |
 | `button` | `stupidsim button A1B2C3D4 home` |
