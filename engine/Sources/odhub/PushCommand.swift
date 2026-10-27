@@ -67,12 +67,15 @@ struct Push: AsyncParsableCommand {
 
     func run() async throws {
         var json = try payloadJSON()
-        let target = bundleID ?? Self.targetBundle(inPayload: json) ?? "the payload's target bundle"
+        // Read before the extension runs: one that replaces userInfo drops the payload's
+        // "Simulator Target Bundle" key, so the app is named to simctl explicitly.
+        let app = bundleID ?? Self.targetBundle(inPayload: json)
+        let target = app ?? "the payload's target bundle"
         if !skipServiceExtension, let serviced = try serviceExtension(json, target: target) {
             json = serviced
         }
         do {
-            try SimctlService().push(json, bundleID: bundleID, udid: udid)
+            try SimctlService().push(json, bundleID: app, udid: udid)
         } catch EngineError.simctl(_, _, let stderr) where stderr.contains(Self.notAuthorized) {
             throw PushNotAuthorized(target: target)
         }

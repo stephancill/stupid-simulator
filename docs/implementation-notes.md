@@ -31,16 +31,21 @@ v0.2.0), and what has been verified where. Newest first.
   original's sound) and delivers that through `simctl push`. Attachments and communication avatars
   are reported, not shown.
 - `push` runs the extension when the payload has `"mutable-content": 1` and the app's `PlugIns` has an
-  `.appex` for `com.apple.usernotifications.service`; `--skip-service-extension` turns it off.
+  `.appex` for `com.apple.usernotifications.service`; `--skip-service-extension` turns it off. The app
+  is named to `simctl push` explicitly, from `--bundle-id` or the original payload's `Simulator Target
+  Bundle`, since an extension that replaces `userInfo` drops that key from the serviced payload.
 - The test host now carries a Notification Service Extension that prefixes titles with "Serviced: "
-  and sets `userInfo["serviced"]`, built and ad hoc signed by `scripts/build-test-host.sh`. Launched
+  and replaces `userInfo` with `["serviced": true]`, built and ad hoc signed by `scripts/build-test-host.sh`. Launched
   with `--request-notifications` it asks for permission and presents banners in front; otherwise it
   does not ask, so the input scripts' screenshots are unchanged.
 - Verified on Xcode 27 (27A266a) with an iOS 27.0 device: the test host's banner read "Serviced:
   Extension" after a `mutable-content` push, `--expect "Serviced: ..."` passed, a push without
   `mutable-content` and one with `--skip-service-extension` showed the payload as sent, the
   `Simulator Target Bundle` key worked, and a third-party app's extension ran (it passes unencrypted
-  payloads through unchanged). With the helper cached a push with `--verify` took 1.7 s; the first
+  payloads through unchanged). A tester then ran Stupid Social's extension on real Web Push
+  ciphertext encrypted to a seeded registration: the decrypted sender, room and message reached the
+  banner, it reported a Communication Notification, reply and open worked on the serviced banner, and
+  an undecryptable payload showed the extension's fallback. With the helper cached a push with `--verify` took 1.7 s; the first
   run, compiling it, 5.4 s. Not checked: an extension that adds attachments or a communication
   context, and the 30 second expiry.
 
