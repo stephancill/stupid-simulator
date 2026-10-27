@@ -3,6 +3,13 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.4.5
+
+- `stupidsim push` runs the app's Notification Service Extension when the payload has
+  `"mutable-content": 1`, as a device does, and the banner shows what it made: title, subtitle,
+  body, thread, category, badge and `userInfo`. It reports attachments and Communication
+  Notifications, which cannot be shown. `--skip-service-extension` sends the payload as it is.
+
 ## 0.4.4
 
 - `stupidsim notification` reads the banner a simulator is showing and acts on it by its text, not
