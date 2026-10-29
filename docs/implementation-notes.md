@@ -3,6 +3,32 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## Communication Notification avatars from `push`
+
+- `push` used to print the same "the sender's avatar is not shown" line for every Communication
+  Notification, so there was no telling whether the extension attached an image. The helper now
+  reports the private `_UNNotificationCommunicationContext`: `isGroup`, `displayName`, `contentURL`,
+  `imageName` and `isSystemImage`, each checked with `respondsToSelector:` before use.
+- `content.updating(from:)` keeps one avatar, in `contentURL`: an
+  `intents-remote-image-proxy:?proxyIdentifier=<id>.png&storageServiceIdentifier=com.apple.Intents.INImageServiceConnection`
+  URL whose image is the file `<id>` in the device's `data/Library/Intents/Images`. `push` reads it
+  there with ImageIO for its pixel size and type, and `--save-avatar <file>` copies it. Any other
+  URL, or a missing or unreadable file, fails with the URL named.
+- Which image it keeps: the sender's for a direct message; in a group with two or more other
+  recipients the group's (`setImage(_:forParameterNamed: \.speakableGroupName)`) and, with no group
+  image, none even when the sender has one; in a "group" with one other recipient, the sender's. The
+  report therefore gives the image found rather than saying whose it is.
+- The sender's name does not survive the trip from the extension: its `_UNNotificationContact`
+  arrives with `displayName` nil and an obfuscated handle, so it is not reported.
+- The test host's extension makes a Communication Notification when the payload has a
+  `communication` object (sender, `avatar` side, `group`, `groupAvatar` side, `others`), drawing a
+  blue sender PNG and a green group PNG so a saved avatar shows which one iOS kept.
+- Verified on Xcode 27 (27A266a) with an iOS 27.0 device through the test host's extension: a
+  direct message with a 120 px sender image reported and saved 120×120 PNG and `--verify` passed; one
+  without reported "no avatar attached" and `--save-avatar` failed before pushing; a group of three
+  with a 64 px group image saved the green 64×64 PNG; the same group without a group image reported
+  none.
+
 ## Running Notification Service Extensions for simulated pushes
 
 - `simctl push` never runs an app's Notification Service Extension. CoreSimulatorBridge turns the

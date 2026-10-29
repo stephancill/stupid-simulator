@@ -1,5 +1,7 @@
 import CryptoKit
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 
 /// What an app's Notification Service Extension made of a push.
 public struct ServicedContent: Codable, Sendable, Hashable {
@@ -22,9 +24,9 @@ public struct ServicedContent: Codable, Sendable, Hashable {
     /// The extension's `userInfo`, keeping only what JSON can carry.
     public var userInfo: [String: JSONValue]
     public var attachments: [Attachment]
-    /// Whether the extension made it a Communication Notification (`content.updating(from:)` with an
-    /// `INSendMessageIntent`), which shows the sender's avatar on a device.
-    public var isCommunication: Bool
+    /// Set when the extension made it a Communication Notification (`content.updating(from:)` with an
+    /// `INSendMessageIntent`), which shows an avatar on a device.
+    public var communication: Communication?
 
     /// The APNs payload `simctl push` delivers in its place. simctl only takes JSON, so attachments
     /// and a communication avatar cannot be shown; `original` supplies what the content does not carry
@@ -49,6 +51,74 @@ public struct ServicedContent: Codable, Sendable, Hashable {
     }
 
     static let interruptionLevels = [0: "passive", 1: "active", 2: "time-sensitive", 3: "critical"]
+}
+
+/// The notification's private `_UNNotificationCommunicationContext`, as the extension left it.
+public struct Communication: Codable, Sendable, Hashable {
+    public var isGroup: Bool
+    /// The conversation's name, the intent's `speakableGroupName`. The sender's name does not survive
+    /// the trip from the extension: its `_UNNotificationContact` arrives with `displayName` nil.
+    public var displayName: String?
+    /// The context's `contentURL`, the one avatar the notification carries. `content.updating(from:)`
+    /// picks it from the intent's images: the sender's for a direct message and, in a group
+    /// conversation, the group's or the sender's depending on the recipients (with two other
+    /// recipients it took the group's and, without one, none; with one it took the sender's). So it
+    /// is reported as found rather than named. Verified on Xcode 27 (27A266a) with an iOS 27.0 device.
+    public var imageURL: String?
+    /// A named image in place of `imageURL`, from the app's bundle or, when `isSystemImage`, SF Symbols.
+    public var imageName: String?
+    public var isSystemImage: Bool
+
+    /// The avatar's file on the Mac, or nil when the notification carries none in a file.
+    public func avatar(udid: String) throws -> Avatar? {
+        guard let imageURL else { return nil }
+        guard let url = URL(string: imageURL) else { throw AvatarUnreadable(url: imageURL, reason: "not a URL") }
+        let file = try Self.file(for: url, udid: udid)
+        guard FileManager.default.fileExists(atPath: file.path(percentEncoded: false)) else {
+            throw AvatarUnreadable(url: imageURL, reason: "no file at \(file.path(percentEncoded: false))")
+        }
+        guard let source = CGImageSourceCreateWithURL(file as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int else {
+            throw AvatarUnreadable(url: imageURL, reason: "\(file.path(percentEncoded: false)) is not an image")
+        }
+        let uti = CGImageSourceGetType(source) as String?
+        let type = uti.flatMap { UTType($0)?.preferredFilenameExtension?.uppercased() } ?? uti ?? "image"
+        return Avatar(file: file, width: width, height: height, type: type)
+    }
+
+    /// `INImage`'s image service keeps the image in the device's `Library/Intents/Images`, named by
+    /// the proxy URL's `proxyIdentifier`. Verified on Xcode 27 (27A266a) with an iOS 27.0 device.
+    static func file(for url: URL, udid: String) throws -> URL {
+        if url.isFileURL { return url }
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        guard url.scheme == "intents-remote-image-proxy",
+              items.first(where: { $0.name == "storageServiceIdentifier" })?.value == "com.apple.Intents.INImageServiceConnection",
+              let identifier = items.first(where: { $0.name == "proxyIdentifier" })?.value,
+              !identifier.isEmpty, !identifier.contains("/") else {
+            throw AvatarUnreadable(url: url.absoluteString, reason: "not an image store this build knows")
+        }
+        return SimctlService.deviceDataDirectory(udid: udid)
+            .appending(path: "Library/Intents/Images")
+            .appending(path: identifier)
+    }
+}
+
+/// A Communication Notification's avatar, as stored on the device.
+public struct Avatar: Sendable, Hashable {
+    public var file: URL
+    public var width: Int
+    public var height: Int
+    /// The file type, such as "PNG".
+    public var type: String
+}
+
+public struct AvatarUnreadable: Error, CustomStringConvertible {
+    public let url: String
+    public let reason: String
+
+    public var description: String { "The Communication Notification's avatar \(url) could not be read: \(reason)" }
 }
 
 /// A JSON value, so `userInfo` survives a round trip through Codable.
@@ -289,14 +359,26 @@ public enum ServiceExtensionHost {
                 if (attachment.type) entry[@"type"] = attachment.type;
                 [attachments addObject:entry];
             }
-            BOOL communication = [result respondsToSelector:@selector(communicationContext)]
-                && [result performSelector:@selector(communicationContext)] != nil;
+            if (![result respondsToSelector:@selector(communicationContext)]) return fail(69, @"UNNotificationContent has no communicationContext");
+            id conversation = [result performSelector:@selector(communicationContext)];
+            NSMutableDictionary *communication = nil;
+            if (conversation) {
+                for (NSString *name in @[@"isGroup", @"displayName", @"contentURL", @"imageName", @"isSystemImage"]) {
+                    if (![conversation respondsToSelector:NSSelectorFromString(name)])
+                        return fail(69, [NSString stringWithFormat:@"_UNNotificationCommunicationContext has no %@", name]);
+                }
+                communication = [@{@"isGroup": [conversation valueForKey:@"group"], @"isSystemImage": [conversation valueForKey:@"systemImage"]} mutableCopy];
+                communication[@"displayName"] = [conversation valueForKey:@"displayName"];
+                communication[@"imageName"] = [conversation valueForKey:@"imageName"];
+                communication[@"imageURL"] = [[conversation valueForKey:@"contentURL"] absoluteString];
+            }
             NSMutableDictionary *output = [@{
                 @"title": result.title ?: @"", @"subtitle": result.subtitle ?: @"", @"body": result.body ?: @"",
                 @"categoryIdentifier": result.categoryIdentifier ?: @"", @"threadIdentifier": result.threadIdentifier ?: @"",
                 @"interruptionLevel": @(result.interruptionLevel), @"relevanceScore": @(result.relevanceScore),
-                @"userInfo": jsonSafe(result.userInfo) ?: @{}, @"attachments": attachments, @"isCommunication": @(communication),
+                @"userInfo": jsonSafe(result.userInfo) ?: @{}, @"attachments": attachments,
             } mutableCopy];
+            if (communication) output[@"communication"] = communication;
             if (result.badge) output[@"badge"] = result.badge;
             if (result.targetContentIdentifier) output[@"targetContentIdentifier"] = result.targetContentIdentifier;
             NSData *json = [NSJSONSerialization dataWithJSONObject:output options:NSJSONWritingSortedKeys error:&error];

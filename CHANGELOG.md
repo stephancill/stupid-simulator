@@ -3,6 +3,12 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## Unreleased
+
+- `stupidsim push` says whether a Communication Notification carries an avatar, with its size and
+  type, where it used to print the same line either way. `--save-avatar <file>` copies the avatar
+  out so it can be looked at; the simulator still shows the app icon on the banner.
+
 ## 0.4.7
 
 - ⌘V no longer freezes the device. 0.4.6 copied with `simctl pbcopy` on the main thread, which could

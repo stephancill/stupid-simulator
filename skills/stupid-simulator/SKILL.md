@@ -98,8 +98,12 @@ stupidsim notification <udid> open --match T               # tap it: opens the a
   `"mutable-content": 1`, as a device does, and prints what it made (`ran <extension>: title ...`).
   The banner shows the extension's title, subtitle, body, thread, category and badge, and its
   `userInfo` is delivered, so `--verify --expect` checks the extension's output. Its attachments and a
-  Communication Notification avatar are reported but not shown, since delivery is still through
-  `simctl push`. `--skip-service-extension` delivers the payload as sent. Plain `xcrun simctl push`
+  Communication Notification's avatar are reported but not drawn, since delivery is still through
+  `simctl push`: the banner shows the app icon either way. For a Communication Notification it prints
+  `avatar attached: 120×120 PNG at <file>` or `no avatar attached`; `--save-avatar <file>` copies the
+  image out to look at (and fails, without pushing, when there is none). iOS keeps one avatar per
+  notification: a direct message's sender image, and in a group of three or more the group image
+  only, so a group with no group image has none even when the sender has one. `--skip-service-extension` delivers the payload as sent. Plain `xcrun simctl push`
   never runs the extension. The first run compiles a small helper with Xcode's simulator SDK, which
   takes a few seconds.
 - **Ad-hoc simulator builds get no APNs device token.** `stupid-app run --simulator` signs without a

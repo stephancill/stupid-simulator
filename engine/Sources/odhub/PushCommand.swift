@@ -17,7 +17,9 @@ struct Push: AsyncParsableCommand {
             When the payload has "mutable-content": 1 and the app has a Notification Service
             Extension, the extension runs first, as on a device, and the banner shows what it made.
             Its title, subtitle, body, thread, category, badge and userInfo are delivered; its
-            attachments and a Communication Notification avatar are reported but cannot be shown.
+            attachments and a Communication Notification's avatar are reported but cannot be shown.
+            The avatar's report says whether one is attached, its size and type; --save-avatar
+            copies it to a file to look at.
             --verify waits for a banner showing the alert's title, subtitle and body, or every
             --expect instead, and prints its text. A push the app in front chooses not to present
             fails it. Act on the banner with `stupidsim notification`.
@@ -42,6 +44,9 @@ struct Push: AsyncParsableCommand {
     @Flag(help: "Deliver the payload as it is, without running the app's Notification Service Extension.")
     var skipServiceExtension = false
 
+    @Option(help: "Copy the Communication Notification's avatar to this file. Fails, without pushing, when there is none.")
+    var saveAvatar: String?
+
     @Flag(help: "Fail unless a banner with the alert's text appears, and print the banner's text.")
     var verify = false
 
@@ -55,6 +60,9 @@ struct Push: AsyncParsableCommand {
         guard verifyTimeout > 0 else { throw ValidationError("--verify-timeout must be more than zero.") }
         if !expect.isEmpty, !verify {
             throw ValidationError("--expect needs --verify.")
+        }
+        if saveAvatar != nil, skipServiceExtension {
+            throw ValidationError("--save-avatar needs the Notification Service Extension, which --skip-service-extension turns off.")
         }
         let builds = title != nil || body != nil
         if builds, payload != nil {
@@ -73,6 +81,8 @@ struct Push: AsyncParsableCommand {
         let target = app ?? "the payload's target bundle"
         if !skipServiceExtension, let serviced = try serviceExtension(json, target: target) {
             json = serviced
+        } else if saveAvatar != nil {
+            throw NoAvatar(reason: "the Notification Service Extension did not run: the payload needs \"mutable-content\": 1 and the app a service extension")
         }
         do {
             try SimctlService().push(json, bundleID: app, udid: udid)
@@ -115,8 +125,19 @@ struct Push: AsyncParsableCommand {
         if !serviced.attachments.isEmpty {
             print("  \(serviced.attachments.count) attachment(s), not shown: " + serviced.attachments.map(\.url).joined(separator: ", "))
         }
-        if serviced.isCommunication {
-            print("  a Communication Notification; the sender's avatar is not shown")
+        if let communication = serviced.communication {
+            print("  " + Self.describe(communication))
+            let avatar = try communication.avatar(udid: udid)
+            print("  " + Self.describe(avatar: avatar, in: communication))
+            if let saveAvatar {
+                guard let avatar else { throw NoAvatar(reason: "the extension attached none") }
+                let destination = URL(fileURLWithPath: saveAvatar)
+                try? FileManager.default.removeItem(at: destination)
+                try FileManager.default.copyItem(at: avatar.file, to: destination)
+                print("  saved the avatar to \(destination.path(percentEncoded: false))")
+            }
+        } else if saveAvatar != nil {
+            throw NoAvatar(reason: "the extension did not make a Communication Notification")
         }
         let payload = serviced.payload(replacing: original)
         let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
@@ -128,6 +149,22 @@ struct Push: AsyncParsableCommand {
             .filter { !$0.1.isEmpty }
             .map { "\($0.0) \"\($0.1)\"" }
             .joined(separator: ", ")
+    }
+
+    static func describe(_ communication: Communication) -> String {
+        guard communication.isGroup else { return "a Communication Notification (a direct message)" }
+        return "a Communication Notification in the group conversation" + (communication.displayName.map { " \"\($0)\"" } ?? "")
+    }
+
+    /// Worded so "not drawn" is never read as "not attached": the simulator shows the app icon either way.
+    static func describe(avatar: Avatar?, in communication: Communication) -> String {
+        if let avatar {
+            return "avatar attached: \(avatar.width)×\(avatar.height) \(avatar.type) at \(avatar.file.path(percentEncoded: false)); the simulator does not draw it"
+        }
+        if let name = communication.imageName {
+            return "avatar attached: \(communication.isSystemImage ? "the system image" : "the app's image") \"\(name)\"; the simulator does not draw it"
+        }
+        return "no avatar attached"
     }
 
     static func targetBundle(inPayload json: String) -> String? {
@@ -175,6 +212,12 @@ struct Push: AsyncParsableCommand {
         Check the app is allowed to send notifications and that, when it is in front, it presents \
         them.
         """
+}
+
+struct NoAvatar: Error, CustomStringConvertible {
+    let reason: String
+
+    var description: String { "No avatar to save, so nothing was pushed: \(reason)." }
 }
 
 struct PushNotAuthorized: Error, CustomStringConvertible {
