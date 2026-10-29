@@ -3,7 +3,7 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
-## Unreleased
+## 0.4.9
 
 - The screenshot card can be dragged into Finder, Messages, a browser or anywhere else that takes a
   file. The drag saves the screenshot first and drops the saved file.
