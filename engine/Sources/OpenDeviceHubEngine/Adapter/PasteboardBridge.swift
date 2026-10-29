@@ -122,9 +122,11 @@ public final class PasteboardBridge: PasteboardSession, @unchecked Sendable {
     /// Called when the app stops being frontmost, which is when a copy made inside the device is
     /// about to be pasted somewhere else.
     ///
-    /// A Mac copy that has not been carried over yet is pushed first, so the pull that follows cannot
-    /// overwrite it: after the push both sides hold it, and the pull is then a no-op. Whichever side
-    /// was copied on last wins, in either order.
+    /// A Mac copy that has not been carried over yet is pushed instead, and nothing is pulled. The
+    /// push is not finished when it returns: pulled straight after, the device answered with its
+    /// clipboard from before the push, so a screenshot copied from the capture card was replaced by
+    /// the device's old text two times in three. Verified on Xcode 27 (27A266a) with iOS 27.0. A
+    /// device copy made after a Mac copy in the viewer comes back on the next reconcile instead.
     ///
     /// The automatic sync pushes inside the private interface, where there is nothing to observe, so
     /// the Mac's change count still looks new after it has carried a copy. Pushed again here, that
@@ -136,8 +138,9 @@ public final class PasteboardBridge: PasteboardSession, @unchecked Sendable {
         defer { lock.unlock() }
         if pasteboard.changeCount != lastSeenChangeCount {
             interface.push()
+        } else {
+            interface.pull()
         }
-        interface.pull()
         lastSeenChangeCount = pasteboard.changeCount
     }
 

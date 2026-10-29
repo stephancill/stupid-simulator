@@ -3,6 +3,13 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## Unreleased
+
+- The screenshot card can be dragged into Finder, Messages, a browser or anywhere else that takes a
+  file. The drag saves the screenshot first and drops the saved file.
+- A screenshot copied from the card stays on the clipboard after switching to another app. With
+  pasteboard sync on, switching away used to bring the device's older clipboard back over it.
+
 ## 0.4.8
 
 - Copying on the device and pasting on the Mac now works. With pasteboard sync on, switching away

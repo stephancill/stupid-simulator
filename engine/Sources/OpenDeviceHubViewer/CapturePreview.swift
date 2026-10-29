@@ -133,6 +133,7 @@ final class CapturePreviewPanel: NSPanel {
     private var lifetime: TimeInterval = 0
     private var isHovered = false
     private var isMenuOpen = false
+    private var dragged: [URL]?
     private let filer = CaptureFiler()
     private let stack: CapturePreviewView
     private var saveItem: NSMenuItem?
@@ -161,6 +162,8 @@ final class CapturePreviewPanel: NSPanel {
             self?.isHovered = inside
             self?.holdChanged()
         }
+        stack.onDragStart = { [weak self] in self?.startDrag() ?? [] }
+        stack.onDragEnd = { [weak self] in self?.endDrag() }
         stack.menu = buildMenu()
         contentView = stack
     }
@@ -180,7 +183,7 @@ final class CapturePreviewPanel: NSPanel {
         lifetime = seconds
         countdown?.cancel()
         // Held while the pointer is on it, a new capture joining must not start the clock.
-        guard !isHovered, !isMenuOpen else {
+        guard !isHovered, !isMenuOpen, dragged == nil else {
             countdown = nil
             return
         }
@@ -198,10 +201,11 @@ final class CapturePreviewPanel: NSPanel {
 
     /// The card stays while the pointer is on it or its menu is open, and gets its full time again
     /// once left, so it never closes under someone reaching for it. Tracked apart because opening
-    /// the menu can move the pointer out of the card.
+    /// the menu can move the pointer out of the card. A drag leaves the card, and must not let the
+    /// countdown file captures the drag has already moved.
     private func holdChanged() {
         guard onFinish != nil else { return }
-        if isHovered || isMenuOpen {
+        if isHovered || isMenuOpen || dragged != nil {
             stopCountdown()
         } else if countdown == nil {
             startCountdown(lifetime)
@@ -236,6 +240,22 @@ final class CapturePreviewPanel: NSPanel {
         stopCountdown()
         let landed = settleAll()
         landed.forEach { NSWorkspace.shared.open($0) }
+        onFinish?(.saved(landed))
+    }
+
+    /// A drop needs a file that outlives the card, so the captures are filed before the drag starts
+    /// and the drag carries where they landed, as dragging the macOS screenshot thumbnail does.
+    private func startDrag() -> [URL] {
+        stopCountdown()
+        let landed = settleAll()
+        dragged = landed
+        return landed
+    }
+
+    /// Dropped or not, the captures are already filed, so the card is done either way.
+    private func endDrag() {
+        let landed = dragged ?? []
+        dragged = nil
         onFinish?(.saved(landed))
     }
 
@@ -345,10 +365,18 @@ extension CapturePreviewPanel: NSMenuDelegate {
 
 /// The newest capture in front, with up to `CapturePreviewLayout.stackDepth` older ones peeking
 /// out behind it and a count once there is more than one.
-private final class CapturePreviewView: NSView {
+private final class CapturePreviewView: NSView, NSDraggingSource {
     var onClick: (() -> Void)?
     var onHover: ((Bool) -> Void)?
+    /// Files the captures and returns where they landed, which is what the drag carries.
+    var onDragStart: (() -> [URL])?
+    var onDragEnd: (() -> Void)?
     private var images: [NSImage]
+    /// Where a press started, until it becomes a drag or is released as a click.
+    private var pressedAt: CGPoint?
+
+    /// How far the pointer moves before a press is a drag rather than a click.
+    private static let dragThreshold: CGFloat = 4
 
     private static let cornerRadius: CGFloat = 10
 
@@ -434,6 +462,46 @@ private final class CapturePreviewView: NSView {
             rightMouseDown(with: event)
             return
         }
+        // Opened on release instead, so pressing to drag does not open the capture.
+        pressedAt = event.locationInWindow
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let start = pressedAt else { return }
+        let point = event.locationInWindow
+        guard hypot(point.x - start.x, point.y - start.y) >= Self.dragThreshold else { return }
+        pressedAt = nil
+        let urls = onDragStart?() ?? []
+        guard !urls.isEmpty else {
+            onDragEnd?()
+            return
+        }
+        let card = CGRect(origin: .zero, size: cardSize)
+        let items = urls.enumerated().map { index, url in
+            let item = NSDraggingItem(pasteboardWriter: url as NSURL)
+            // Oldest first, as the cards are stacked, so the newest is dragged on top.
+            let image = images.indices.contains(index) ? images[index] : images.last
+            item.setDraggingFrame(card, contents: image)
+            return item
+        }
+        beginDraggingSession(with: items, event: event, source: self)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard pressedAt != nil else { return }
+        pressedAt = nil
         onClick?()
+    }
+
+    func draggingSession(
+        _ session: NSDraggingSession,
+        sourceOperationMaskFor context: NSDraggingContext
+    ) -> NSDragOperation {
+        // Copy only: the capture stays where it was filed, whatever the drop does with it.
+        .copy
+    }
+
+    func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        onDragEnd?()
     }
 }

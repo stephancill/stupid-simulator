@@ -171,6 +171,12 @@ v0.2.0), and what has been verified where. Newest first.
 - Verified on Xcode 27 (27A266a) with an iOS 27.0 device by driving the app with System Events and
   synthetic clicks: three Save Screen presses made one card with a badge of 3, and Copy left three
   items with `public.png` and `public.tiff` on the pasteboard and filed all three captures.
+- The card can be dragged. A press now opens the capture on release, so a press that moves 4 points
+  becomes a drag instead. The drag files the captures first and carries the file URLs where they
+  landed, one dragging item per screenshot, with `.copy` as the only operation. The card closes when
+  the drag ends, dropped or not, because its captures are already filed; its countdown is held for
+  the drag so it cannot try to file them again. Checked by hand in the app on Xcode 27 (27A266a)
+  with an iOS 27.0 device.
 
 ## Version through a symlink
 
@@ -317,6 +323,16 @@ Xcode 27 (27A266a) with an iOS 27.0 device in the app: after a Mac copy, a devic
 pbcopy`) reached the Mac on switching to Finder, twice in a row, and a later Mac copy still reached
 the device. `testReconcileBringsTheDeviceClipboardBackWhileSyncing` failed before the change and
 passes after it.
+
+A screenshot copied from the capture card was then lost on switching away. `reconcile` pushed the
+newer Mac copy and pulled straight after, but the push had not finished by then, so the device
+answered with its clipboard from before it: the device's older text replaced the image two times
+in three. `reconcile` now pushes a newer Mac copy and pulls nothing. The cost is a device copy made
+in the viewer after a Mac copy there, which comes back on the next reconcile rather than this one.
+Verified on Xcode 27 (27A266a) with an iOS 27.0 device: `testReconcileKeepsAnImageCopiedOnTheMac`
+failed twice in a row before the change and passes after it, and the other pasteboard integration
+tests still pass. They fail while another viewer with pasteboard sync on is running, because that
+viewer writes the Mac's clipboard onto the device too.
 
 ## Hardware buttons
 

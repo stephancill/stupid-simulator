@@ -157,6 +157,36 @@ final class PasteboardBridgeTests: XCTestCase {
         XCTAssertEqual(try simctlPaste(udid: udid), newerOnTheMac)
     }
 
+    /// The capture card's case: a screenshot copied inside the viewer, then the user switches away.
+    /// Pushed and pulled straight after, the pull brought the device's older text back over it.
+    func testReconcileKeepsAnImageCopiedOnTheMac() throws {
+        try IntegrationGate.requireEnabled()
+        let udid = try bootedDevice().udid
+        let session = try makeAdapter().openPasteboard(udid)
+        session.setAutomatic(true)
+        defer { session.setAutomatic(false) }
+
+        try simctlCopy("older-on-the-device", udid: udid)
+        spin(1)
+        session.markMacClipboardCarried()
+        let image = NSImage(size: CGSize(width: 8, height: 8), flipped: false) { rect in
+            NSColor.systemRed.setFill()
+            rect.fill()
+            return true
+        }
+        let png = try XCTUnwrap(
+            image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:))?
+                .representation(using: .png, properties: [:])
+        )
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setData(png, forType: .png)
+        session.reconcile()
+        spin(1)
+
+        XCTAssertNotNil(NSPasteboard.general.data(forType: .png))
+        XCTAssertNil(NSPasteboard.general.string(forType: .string))
+    }
+
     private func simctlPaste(udid: String) throws -> String {
         try simctl(["pbpaste", udid])
     }
