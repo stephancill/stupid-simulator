@@ -3,6 +3,11 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.4.6
+
+- ⌘V in a device window pastes the Mac's clipboard text into the focused field, as Simulator.app
+  did. It used to put the text on the device's pasteboard and paste nothing.
+
 ## 0.4.5
 
 - `stupidsim push` runs the app's Notification Service Extension when the payload has
