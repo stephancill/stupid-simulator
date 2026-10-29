@@ -3,6 +3,13 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.4.7
+
+- ⌘V no longer freezes the device. 0.4.6 copied with `simctl pbcopy` on the main thread, which could
+  leave the device's pasteboard waiting on the viewer forever, so every text field hung when it took
+  focus. ⌘V now sends the Mac's clipboard over the viewer's own pasteboard connection. A device
+  already stuck recovers when restarted.
+
 ## 0.4.6
 
 - ⌘V in a device window pastes the Mac's clipboard text into the focused field, as Simulator.app
