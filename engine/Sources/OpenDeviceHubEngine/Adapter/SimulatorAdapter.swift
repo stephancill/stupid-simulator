@@ -163,6 +163,9 @@ public protocol PasteboardSession: Sendable {
     func get()
     /// Brings the device's clipboard back to the Mac, unless the Mac's is the newer of the two.
     func reconcile()
+    /// Records that the Mac's clipboard as it stands has reached the device, so `reconcile` does not
+    /// push it again over a copy made on the device since.
+    func markMacClipboardCarried()
 }
 
 /// Folds and turns a foldable.

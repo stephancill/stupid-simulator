@@ -120,6 +120,27 @@ final class PasteboardBridgeTests: XCTestCase {
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), onTheDevice)
     }
 
+    /// The viewer's case: the sync is on, so the Mac's clipboard has already reached the device on
+    /// its own by the time the viewer becomes active, and a device copy made after that has to come
+    /// back. Before `markMacClipboardCarried` the reconcile pushed the Mac's copy over it.
+    func testReconcileBringsTheDeviceClipboardBackWhileSyncing() throws {
+        try IntegrationGate.requireEnabled()
+        let udid = try bootedDevice().udid
+        let session = try makeAdapter().openPasteboard(udid)
+        session.setAutomatic(true)
+        defer { session.setAutomatic(false) }
+        setMacClipboard("odhub-mac-\(UUID().uuidString)")
+        spin(1)
+        session.markMacClipboardCarried()
+
+        let onTheDevice = "odhub-back-\(UUID().uuidString)"
+        try simctlCopy(onTheDevice, udid: udid)
+        session.reconcile()
+        spin(1)
+
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), onTheDevice)
+    }
+
     /// The guard that stops a pull from eating a copy the user made on the Mac a moment earlier.
     func testReconcileKeepsANewerMacCopy() throws {
         try IntegrationGate.requireEnabled()

@@ -69,6 +69,13 @@ public final class PasteboardSyncController {
         session(for: udid)?.reconcile()
     }
 
+    /// Called when the app becomes frontmost. The automatic sync has carried every Mac copy made in
+    /// the meantime, so the next reconcile only pushes a copy made inside the viewer.
+    public func noteBecameActive() {
+        guard isAutomatic else { return }
+        for session in sessions.values { session.markMacClipboardCarried() }
+    }
+
     private func session(for udid: String) -> (any PasteboardSession)? {
         if let existing = sessions[udid] { return existing }
         guard let opened = try? open(udid) else { return nil }

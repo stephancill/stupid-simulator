@@ -306,6 +306,18 @@ the device. Verified on Xcode 27 with iOS 27.0: pasting into Settings search thr
 connection filled the field, every guest load got its reply within a millisecond, and `simctl
 pbpaste` still answered afterwards.
 
+A copy made on the device never reached the Mac while pasteboard sync was on (the default).
+Switching away from the viewer calls `reconcile`, which pushes the Mac's clipboard first when its
+change count moved since the bridge last looked, then pulls. The automatic sync carries Mac copies
+inside the private interface and never moved that mark, so after any Mac copy every reconcile pushed
+the old Mac text over the device copy and pulled it straight back. The viewer now calls
+`markMacClipboardCarried` on each open device's connection when it becomes active, so a reconcile
+pushes only a copy made inside the viewer (such as a screenshot copied to the clipboard). Verified on
+Xcode 27 (27A266a) with an iOS 27.0 device in the app: after a Mac copy, a device copy (`simctl
+pbcopy`) reached the Mac on switching to Finder, twice in a row, and a later Mac copy still reached
+the device. `testReconcileBringsTheDeviceClipboardBackWhileSyncing` failed before the change and
+passes after it.
+
 ## Hardware buttons
 
 `IndigoHIDMessageForButton(eventSource, direction, target)` with upstream's target 0x33 is accepted

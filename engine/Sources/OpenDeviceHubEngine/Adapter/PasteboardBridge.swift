@@ -124,9 +124,13 @@ public final class PasteboardBridge: PasteboardSession, @unchecked Sendable {
     ///
     /// A Mac copy that has not been carried over yet is pushed first, so the pull that follows cannot
     /// overwrite it: after the push both sides hold it, and the pull is then a no-op. Whichever side
-    /// was copied on last wins, in either order. The push cannot be skipped by watching the Mac's
-    /// change count alone, because the automatic sync pushes inside the private interface, where
-    /// there is nothing to observe.
+    /// was copied on last wins, in either order.
+    ///
+    /// The automatic sync pushes inside the private interface, where there is nothing to observe, so
+    /// the Mac's change count still looks new after it has carried a copy. Pushed again here, that
+    /// copy overwrote whatever had been copied on the device since, and a device copy never reached
+    /// the Mac. `markMacClipboardCarried` is called when the viewer becomes active, by which time the
+    /// sync has carried the Mac's copies over, so only a copy made inside the viewer is pushed.
     public func reconcile() {
         lock.lock()
         defer { lock.unlock() }
@@ -134,6 +138,12 @@ public final class PasteboardBridge: PasteboardSession, @unchecked Sendable {
             interface.push()
         }
         interface.pull()
+        lastSeenChangeCount = pasteboard.changeCount
+    }
+
+    public func markMacClipboardCarried() {
+        lock.lock()
+        defer { lock.unlock() }
         lastSeenChangeCount = pasteboard.changeCount
     }
 }

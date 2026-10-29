@@ -7,11 +7,13 @@ private final class FakeSession: PasteboardSession, @unchecked Sendable {
     var sends = 0
     var gets = 0
     var reconciles = 0
+    var carried = 0
 
     func setAutomatic(_ enabled: Bool) { isAutomatic = enabled }
     func send() { sends += 1 }
     func get() { gets += 1 }
     func reconcile() { reconciles += 1 }
+    func markMacClipboardCarried() { carried += 1 }
 }
 
 @MainActor
@@ -89,6 +91,20 @@ final class PasteboardSyncControllerTests: XCTestCase {
         let on = makeController(isAutomatic: true)
         on.reconcileOnResignActive()
         XCTAssertEqual(sessions["a"]?.reconciles, 1)
+    }
+
+    func testBecomingActiveMarksTheMacClipboardCarriedOnlyWhileTheSyncIsOn() {
+        open = ["a"]
+        front = "a"
+        let off = makeController(isAutomatic: false)
+        off.get()
+        off.noteBecameActive()
+        XCTAssertEqual(sessions["a"]?.carried, 0)
+
+        let on = makeController(isAutomatic: true)
+        on.adopt("a")
+        on.noteBecameActive()
+        XCTAssertEqual(sessions["a"]?.carried, 1)
     }
 
     func testForgettingADeviceStopsItsSyncAndDropsTheConnection() {

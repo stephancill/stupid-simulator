@@ -628,6 +628,7 @@ struct ODHubViewer: ParsableCommand {
                 ).udids.first },
                 onTerminate: { manager.closeAll() },
                 settlePreviews: { previews.settleEverything() },
+                onBecomeActive: { pasteboard.noteBecameActive() },
                 onResignActive: { pasteboard.reconcileOnResignActive() }
             )
             // NSApplication holds its delegate weakly, and nothing else refers to these objects
@@ -736,6 +737,7 @@ private final class ViewerAppDelegate: NSObject, NSApplicationDelegate {
     private let deviceToReopen: () -> String?
     private let onTerminate: () -> Void
     private let settlePreviews: () -> Void
+    private let onBecomeActive: () -> Void
     private let onResignActive: () -> Void
 
     init(
@@ -746,6 +748,7 @@ private final class ViewerAppDelegate: NSObject, NSApplicationDelegate {
         deviceToReopen: @escaping () -> String?,
         onTerminate: @escaping () -> Void,
         settlePreviews: @escaping () -> Void,
+        onBecomeActive: @escaping () -> Void,
         onResignActive: @escaping () -> Void
     ) {
         self.quitsWithLastWindow = quitsWithLastWindow
@@ -755,7 +758,12 @@ private final class ViewerAppDelegate: NSObject, NSApplicationDelegate {
         self.deviceToReopen = deviceToReopen
         self.onTerminate = onTerminate
         self.settlePreviews = settlePreviews
+        self.onBecomeActive = onBecomeActive
         self.onResignActive = onResignActive
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        onBecomeActive()
     }
 
     /// The automatic sync only carries the Mac's copies to the device, so a copy made inside a device

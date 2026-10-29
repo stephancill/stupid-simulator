@@ -5,6 +5,8 @@ under it until the next heading becomes that version's release notes in the upda
 
 ## Unreleased
 
+- Copying on the device and pasting on the Mac works again. With pasteboard sync on, switching away
+  from the viewer pushed the Mac's older clipboard over the device's copy.
 - `stupidsim push` says whether a Communication Notification carries an avatar, with its size and
   type, where it used to print the same line either way. `--save-avatar <file>` copies the avatar
   out so it can be looked at; the simulator still shows the app icon on the banner.
