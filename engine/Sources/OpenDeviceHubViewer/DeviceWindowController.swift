@@ -470,6 +470,22 @@ public final class DeviceWindowController: NSWindowController, NSWindowDelegate 
         }
     }
 
+    /// Presses a shortcut in the guest, modifiers first, as `stupidsim key` does. Used by menu items
+    /// whose key equivalent the menu takes before the screen view can forward it.
+    public func press(_ chord: KeyboardMap.KeyChord) {
+        send { input in
+            for modifier in chord.modifiers {
+                try await input.key(KeyEvent(phase: .down, usage: modifier))
+            }
+            try await input.key(KeyEvent(phase: .down, usage: chord.usage))
+            try await Task.sleep(for: .milliseconds(25))
+            try await input.key(KeyEvent(phase: .up, usage: chord.usage))
+            for modifier in chord.modifiers.reversed() {
+                try await input.key(KeyEvent(phase: .up, usage: modifier))
+            }
+        }
+    }
+
     private func inputFailed(_ error: any Error) {
         guard !isStopped, !isDetached else { return }
         detach(reason: .failed(InputFailure.message(for: error)))

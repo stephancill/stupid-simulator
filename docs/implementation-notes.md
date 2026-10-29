@@ -263,6 +263,13 @@ round trips of multi line and non ASCII text are exact.
 
 Quitting Device Hub shuts down every simulator it has open, as Simulator.app did.
 
+Edit > Paste (⌘V) in the viewer copied the Mac's text onto the device's pasteboard and stopped
+there. The menu takes ⌘V as a key equivalent before the screen view sees the V, so the guest only
+received Command and nothing was pasted. It now presses ⌘V in the guest after `simctl pbcopy`
+returns, as Simulator.app did. Verified on Xcode 27 with iOS 27.0 in Settings search: the field
+held the Mac's clipboard exactly once, checked with `ui-tree`. Only text is carried; images on the
+Mac's clipboard are not.
+
 ## Hardware buttons
 
 `IndigoHIDMessageForButton(eventSource, direction, target)` with upstream's target 0x33 is accepted

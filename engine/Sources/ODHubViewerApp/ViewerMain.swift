@@ -282,7 +282,18 @@ struct ODHubViewer: ParsableCommand {
                 pasteToDevice: {
                     guard let target = front(),
                           let text = NSPasteboard.general.string(forType: .string) else { return }
-                    try? SimctlService().pasteboardCopy(text, udid: target.udid)
+                    // The menu takes ⌘V before the screen view sees the V, so the guest only ever
+                    // got Command. Copying alone left the text on the device's pasteboard and
+                    // pasted nothing; pressing ⌘V afterwards pastes it, as Simulator.app did.
+                    do {
+                        try SimctlService().pasteboardCopy(text, udid: target.udid)
+                    } catch {
+                        print("paste failed: \(error)")
+                        return
+                    }
+                    if let chord = KeyboardMap.chord(named: "cmd+v") {
+                        target.controller.press(chord)
+                    }
                 },
                 toggleAppearance: {
                     guard let target = front() else { return }
