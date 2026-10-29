@@ -265,10 +265,20 @@ Quitting Device Hub shuts down every simulator it has open, as Simulator.app did
 
 Edit > Paste (⌘V) in the viewer copied the Mac's text onto the device's pasteboard and stopped
 there. The menu takes ⌘V as a key equivalent before the screen view sees the V, so the guest only
-received Command and nothing was pasted. It now presses ⌘V in the guest after `simctl pbcopy`
-returns, as Simulator.app did. Verified on Xcode 27 with iOS 27.0 in Settings search: the field
-held the Mac's clipboard exactly once, checked with `ui-tree`. Only text is carried; images on the
-Mac's clipboard are not.
+received Command and nothing was pasted. It now pushes the Mac's clipboard through the device's
+clipboard connection (`PasteboardSession.send`) and then presses ⌘V in the guest, as Simulator.app
+did.
+
+0.4.6 copied with `simctl pbcopy` instead, run synchronously on the main thread. With pasteboard sync
+on, the guest's `CoreSimulatorBridge` fetches each pasteboard type from the viewer lazily, and the
+viewer answers on its main run loop. While `pbcopy` held the main thread, a fetch went unanswered;
+the bridge logged "BUG IN CLIENT OF PASTEBOARD: ... failed to return data it promised", and the
+guest's `pasted` stayed blocked on it after the main thread came back. Every app that then focused a
+text field hung in `becomeFirstResponder`, which asks `pasted` whether image paste is supported.
+Killing `pasted` in the guest (`launchctl kill SIGKILL system/com.apple.pasteboard.pasted`) recovers
+the device. Verified on Xcode 27 with iOS 27.0: pasting into Settings search through the
+connection filled the field, every guest load got its reply within a millisecond, and `simctl
+pbpaste` still answered afterwards.
 
 ## Hardware buttons
 

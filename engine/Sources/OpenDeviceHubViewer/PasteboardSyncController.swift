@@ -45,10 +45,13 @@ public final class PasteboardSyncController {
         sessions[udid] = nil
     }
 
-    /// The Mac's clipboard to the device in front, like every other menu action.
-    public func send() {
-        guard let udid = frontmost() else { return }
-        session(for: udid)?.send()
+    /// The Mac's clipboard to the device in front, like every other menu action. False when there
+    /// is no device in front or its clipboard connection could not be opened.
+    @discardableResult
+    public func send() -> Bool {
+        guard let udid = frontmost(), let session = session(for: udid) else { return false }
+        session.send()
+        return true
     }
 
     /// The frontmost device's clipboard to the Mac. Every device at once would leave whichever

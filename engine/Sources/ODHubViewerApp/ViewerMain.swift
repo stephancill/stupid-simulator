@@ -280,15 +280,15 @@ struct ODHubViewer: ParsableCommand {
                     target.controller.setKeepOnTop(!target.controller.isKeptOnTop)
                 },
                 pasteToDevice: {
-                    guard let target = front(),
-                          let text = NSPasteboard.general.string(forType: .string) else { return }
+                    guard let target = front() else { return }
                     // The menu takes ⌘V before the screen view sees the V, so the guest only ever
-                    // got Command. Copying alone left the text on the device's pasteboard and
-                    // pasted nothing; pressing ⌘V afterwards pastes it, as Simulator.app did.
-                    do {
-                        try SimctlService().pasteboardCopy(text, udid: target.udid)
-                    } catch {
-                        print("paste failed: \(error)")
+                    // got Command; the copy has to be followed by pressing ⌘V in the guest.
+                    // The copy goes through the clipboard connection, not `simctl pbcopy`: that
+                    // blocked the main thread while the guest's pasteboard asked this process for
+                    // the Mac's data, which is served on the main run loop, and left the guest's
+                    // pasted hung so every text field froze on focus.
+                    guard pasteboard.send() else {
+                        print("paste failed: the device's clipboard connection could not be opened")
                         return
                     }
                     if let chord = KeyboardMap.chord(named: "cmd+v") {
