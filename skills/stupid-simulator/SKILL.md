@@ -183,6 +183,7 @@ Run any with `--help`. Most take `--udid` (default: the booted simulator) and `-
 | Environment | `sim_health_check.sh` | Xcode, simctl, stupidsim and `stupidsim doctor`, Python, booted devices |
 | Discovery | `sim_list.py`, `simulator_selector.py` | Token-light device lists (`--suggest`, `--get-details`), pick or boot the best simulator |
 | Lifecycle | `simctl_boot.py`, `simctl_shutdown.py`, `simctl_create.py`, `simctl_erase.py`, `simctl_delete.py` | By UDID or name, batch with `--all` / `--type`, `--wait-ready`. Delete asks unless `--yes` |
+| Signed-in state | `sim_clone_state.py` | Copy an app's data container, app groups and the keychain from a busy simulator to another (created like the source unless `--target`); the source is only read. `--app` installs a simulator build first, `--launch` boots and opens it |
 | Apps | `app_launcher.py` | `--launch`, `--terminate`, `--restart`, `--install`, `--uninstall`, `--open-url`, `--list`, `--state`, launch `--args` and `--env KEY=VALUE` |
 | Device state | `appearance.py`, `status_bar.py`, `location.py` | Dark mode, Dynamic Type, locale/region; status bar presets (`--preset clean` gives 9:41); fixed coordinates, cities, GPX scenarios |
 | Permissions, push | `privacy_manager.py`, `push_notification.py` | Grant/revoke/reset 13 services; simple or JSON push payloads |

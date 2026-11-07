@@ -207,6 +207,15 @@ in `skills/stupid-simulator/THIRD_PARTY.md`) and a Vision OCR skill.
   (Darwin 27.0) with `e5rtError 13` on every compute device; a failed request is now an error
   rather than an empty result. Normalized output forces the C locale, which otherwise printed
   `0,254`.
+- `sim_clone_state.py` copies one app's signed-in state between simulators for agents sharing a
+  machine: the data container and app group containers by rsync (keeping each target container's
+  `.com.apple.mobile_container_manager.metadata.plist`, which ties it to the target's install), and
+  every `keychain-2*.db` through SQLite's online backup, which is consistent while the source runs,
+  so the source is never shut down or written. The target must be shut down while copying, and
+  the app installed on it first: install is what creates the containers. App groups come from the
+  installed app's entitlements; a group the target has no container for fails the run rather than
+  being skipped silently. Verified on Xcode 27 with an iOS 27.0 iPhone 17 Pro: a cloned app opened
+  still signed in.
 - A device whose input had stopped working was seen a second time on Xcode 27 (an iPhone 17 on
   iOS 27.0, about an hour after a reboot, with Device Hub and this app attached). Quitting this app
   did not bring input back; rebooting the device did.
