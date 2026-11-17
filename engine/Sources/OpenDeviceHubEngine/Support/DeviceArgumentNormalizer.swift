@@ -32,6 +32,11 @@ public enum DeviceArgumentNormalizer {
             }
             return [command, device] + rest
         }
+        // Help must print even when `booted` would not resolve (none or several booted), and the
+        // parser resolves the device before it looks for --help.
+        if rest[..<end].contains(where: { ["-h", "--help", "-help"].contains($0) }) {
+            return [command] + rest.enumerated().filter { $0.offset >= end || $0.element != "booted" }.map(\.element)
+        }
         if rest[..<end].contains(where: isDevice) { return arguments }
         let fallback = environment[environmentVariable].flatMap { $0.isEmpty ? nil : $0 } ?? "booted"
         return [command, fallback] + rest

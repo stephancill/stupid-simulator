@@ -280,6 +280,8 @@ Releases are cut locally; the full procedure is in [RELEASING.md](../RELEASING.m
   or `booted` anywhere, `$STUPIDSIM_UDID` or `booted` is inserted. Positional text such as `type`'s
   is never mistaken for a device, since only UUIDs and `booted` count as one. A UUID typed as text
   would be, which no one is expected to do.
+  With `-h` or `--help` it inserts nothing and drops `booted`, because the parser resolves the
+  device before it handles help, so help failed whenever none or several simulators were booted.
 - `tap` holds 120 ms by default (90 missed small search fields on Xcode 27 (27A266a)); `--long` holds
   800 ms. `tap --at x,y`, `swipe --from x,y --to x,y` and a positional `screenshot` path are aliases.
 - Verified on Xcode 27 (27A266a) with an iOS 27.0 iPhone 17 Pro under heavy load (load average

@@ -134,7 +134,14 @@ private func tree(_ children: [AccessibilityElement]) -> AccessibilityElement {
     @Test func fillsInAMissingDevice() {
         #expect(normalize(["type", "hello"]) == ["type", "booted", "hello"])
         #expect(normalize(["screenshot", "out.png"], environment: ["STUPIDSIM_UDID": udid]) == ["screenshot", udid, "out.png"])
-        #expect(normalize(["tap", "--help"]) == ["tap", "booted", "--help"])
+        #expect(normalize(["tap", "--x", "0.5"]) == ["tap", "booted", "--x", "0.5"])
+    }
+
+    @Test func leavesHelpAloneSoItPrintsWithSeveralBooted() {
+        #expect(normalize(["tap", "--help"]) == ["tap", "--help"])
+        #expect(normalize(["type", "-h"]) == ["type", "-h"])
+        #expect(normalize(["tap", "booted", "--help"]) == ["tap", "--help"])
+        #expect(normalize(["tap", udid, "--help"]) == ["tap", udid, "--help"])
     }
 
     @Test func leavesOtherCommandsAlone() {
