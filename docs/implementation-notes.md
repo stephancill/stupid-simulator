@@ -219,6 +219,16 @@ in `skills/stupid-simulator/THIRD_PARTY.md`) and a Vision OCR skill.
 - A device whose input had stopped working was seen a second time on Xcode 27 (an iPhone 17 on
   iOS 27.0, about an hour after a reboot, with Device Hub and this app attached). Quitting this app
   did not bring input back; rebooting the device did.
+- `biometrics.py` enrolls Face ID / Touch ID and answers prompts with BiometricKit's darwin
+  notifications through `simctl spawn <udid> notifyutil`, as Simulator.app's Features menu does:
+  enrollment sets the state of `com.apple.BiometricKit.enrollmentChanged` (1 or 0) and posts it;
+  a match or non-match posts `com.apple.BiometricKit_Sim.pearl.match` / `.nomatch` (Face ID) or
+  `fingerTouch.match` / `.nomatch` (Touch ID) while a prompt shows. Passkeys refuse to run on a
+  device without enrollment ("Simulator requires enrolled biometrics to use passkeys"). Verified
+  on Xcode 27 with an iOS 27.0 iPhone 17 Pro: after enrollment, a passkey was created and later
+  used in an `ASWebAuthenticationSession` page, each prompt answered with the match notification.
+  Each `notifyutil` call is a `simctl spawn`, about 1 to 5 seconds; the script gives up after 30
+  seconds, which a device that had stopped responding hit.
 
 ## Releases
 
