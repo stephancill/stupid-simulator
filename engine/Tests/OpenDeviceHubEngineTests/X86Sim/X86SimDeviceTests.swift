@@ -22,6 +22,7 @@ import Testing
             SIMULATOR_MAINSCREEN_HEIGHT=2622
             SIMULATOR_MAINSCREEN_SCALE=3.000000
             SIMULATOR_VERSION_INFO=x86Sim - Device: x86sim (ABC) - Runtime: iOS 27.2 (24B8117)
+            \(directory.hasSuffix("-ss") ? "SIMFB_RING=/Volumes/SystemRoot/run/user/1000/x86sim-a64-ss-simfb.ring" : "")
 
             """
         if let udid { environment += "SIMULATOR_UDID=\(udid)\n" }
@@ -39,7 +40,7 @@ import Testing
         #expect(device.runtimeName == "iOS 27.2")
         #expect(device.screenPixels == CGSize(width: 1206, height: 2622))
         #expect(device.scale == 3)
-        #expect(device.frameRing.path == "/dev/shm/x86sim-a64-ss-simfb.ring")
+        #expect(device.frameRing.path == "/run/user/1000/x86sim-a64-ss-simfb.ring")
         #expect(device.inputSocket == folder.appending(path: "data/simhid.sock"))
     }
 

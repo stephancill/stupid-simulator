@@ -3,6 +3,86 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## Fast setup on throwaway Linux machines (`stupidsim-linux`)
+
+A machine with nothing on it took about 20 minutes and 36 GB to get to a booted x86Sim device:
+- 8 minutes downloading the 8.3 GB iOS 27.2 runtime from Apple;
+- 7 minutes unpacking it to 20 GB;
+- 80 seconds of ahead-of-time translation;
+- 3.5 to 5 minutes for a new device's first boot.
+
+Claude Code cloud sessions have about 30 GB of disk, 4 vCPUs and 16 GB of memory. Their network
+proxy blocks Apple's CDN unless the environment allows it. Their setup script is cached (as a
+file system snapshot) only when it finishes in about five minutes. So the cold path cannot work
+there at all. `linux/stupidsim-linux` (Python's standard library, curl, tar and zstd) and
+`linux/cloud-setup.sh` make it a few minutes from a private store.
+
+- **Only the runtime files tests read.** `trace begin` sets every runtime file's access time to
+  2000-01-01, which makes the file system record the next read (relatime updates an access time
+  that is older than the modification time), and boots the device. `trace end <name>` lists the
+  files read since. It refuses a noatime mount, which would record nothing.
+  - On iOS 27.2 (24B8117) the base was 6,158 of 588,147 files, 5.4 GB, 1.78 GB compressed. It
+    covers booting, SpringBoard, the in-device helper, Settings, Spotlight typing, the
+    pasteboard, an app install, a notification and rotation, and is mostly the dyld shared cache.
+  - StupidSocial added 111 files, 0.14 GB.
+- **A runtime pruned to a trace boots and runs what was traced, and nothing else.** Built from
+  hard links to just the files one session read (5.1 GB, 1.8 GB compressed), it cold-booted in the
+  same 3 minutes, and StupidSocial, the test host, the SpringBoard tree and the pasteboard all
+  worked. Safari, Photos, Calendar, Messages, Files and Maps, which the trace never opened, did not
+  launch at all within 25 s; on the whole runtime they opened. An app therefore needs its own
+  manifest (`docs/runbooks/app-manifest.md`).
+- **x86Sim writes its own files into the runtime.**
+  - At boot it writes `LaunchAngels/.x86sim-device-a64-<name>/` and removes it at shutdown. Those
+    paths are left out of manifests, and a listed file that has gone is reported and skipped when
+    packing.
+  - `Metal.framework/Metal`, extracted from the dyld cache on the first boot, stays, and travels
+    in the base pack.
+- **The warm state is x86Sim's translation cache and a device that has booted once.**
+  - The cache is 0.6 GB compressed: the AOT image, its work directory (installing an app updates
+    the image from it) and each process's live translations.
+  - The device is 1.0 GB, without sockets and os_log's `var/db/uuidtext`. Those tables hold the
+    old path in a form `device-repath.py` cannot rewrite, and the device rebuilds them.
+  - x86Sim's own `device-repath.py` moves the device's absolute paths to its new place, as x86Sim
+    does for its clones, and `mksimdevice.py` rewrites `sim.env` at every boot.
+- **The store** is a private R2 bucket.
+  - Under `runtimes/<runtime>/`: a skeleton (every directory and symlink, and the simruntime's own
+    files outside RuntimeRoot), a pack per manifest, the manifests, and the warm parts.
+  - `current.json` names the default runtime and the x86Sim version it was built with; setup
+    refuses a mismatch. It is uploaded last.
+  - Requests are signed by curl's `--aws-sigv4`. `*.r2.cloudflarestorage.com` is on the cloud
+    sessions' default allowlist, so nothing needs a Worker or an allowlist change.
+  - Two R2 API tokens are scoped to the bucket: a writer for publishing and a reader for agents.
+    Anonymous and reader writes are refused.
+  - `store presign` makes time-limited SigV4 query links with the standard library, and
+    `STUPIDSIM_STORE_URLS` lets setup run from those alone.
+  - The store holds Apple's runtime and stays private.
+- **Setup fetches in parallel and streams.** Each object is piped from curl into `tar --zstd`, so
+  no archive is held on disk. A part already present is skipped (`.stupidsim-parts`).
+- **Measured from an empty home directory** (a new user on the WSL 2 box, its download from South
+  Africa to the ENAM bucket the limit):
+  - setup 202 s (installing stupidsim 2 s, x86Sim 40 s, the parts in parallel, the 1.78 GB base
+    last at 198 s);
+  - boot 91 s;
+  - installing StupidSocial 37 s.
+
+  Then `doctor`, the trees, `tap --label Settings --verify`, `wait` and `screenshot` worked.
+- **x86Sim's frame ring is found through sim.env.** The `/dev/shm/x86sim-a64-<name>-simfb.ring`
+  link is named after the device and not the user. With a second user's device also called
+  `agent`, `stupidsim` read the first user's link and could not open it. `X86SimDevice.frameRing`
+  now reads `SIMFB_RING` from sim.env, as `boot-a64.sh` does.
+- **Booting** (`stupidsim-linux boot`) runs x86Sim's `boot-a64.sh` and waits for the home screen.
+  Rendering is Metal on a GPU's Vulkan driver, else lavapipe, else x86Sim's software renderer.
+  On WSL the default is lavapipe, since dozen corrupts frames. `cloud-setup.sh` installs lavapipe
+  (`mesa-vulkan-drivers`) when it runs as root. It does not boot: Claude Code's setup cache keeps
+  files, not processes.
+- Adding an iOS version is `docs/runbooks/new-ios-version.md`.
+- **Not yet working: booting in a Claude Code cloud session.** Setup there took 102 s, but the
+  boot ran the 16 GB VM (no swap) out of memory within a minute: six or more `xpcproxy_sim`
+  processes held 1.3 to 2.1 GB each, which never happens on the WSL box (+3.1 GB for a whole
+  boot). The Lean preset did not change it. Also measured there: no systemd user manager (so
+  x86Sim's `X86SIM_MEM_MAX` is not applied), no `fusermount`, and mtlvk did not start, so the
+  device rendered in software. The cause is not known yet.
+
 ## `stupidsim` on Linux, through x86Sim
 
 [x86Sim](https://github.com/x86sim/x86sim) runs Apple's arm64 iOS simulator runtimes unmodified on

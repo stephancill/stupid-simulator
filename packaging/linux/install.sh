@@ -28,6 +28,7 @@ done
 here="$(cd "$(dirname "$0")" && pwd)"
 install -d "${prefix}/bin" "${prefix}/libexec/stupidsim" "${prefix}/share/stupidsim"
 install -m 0755 "${here}/bin/stupidsim" "${prefix}/bin/stupidsim"
+install -m 0755 "${here}/bin/stupidsim-linux" "${prefix}/bin/stupidsim-linux"
 install -m 0755 "${here}/libexec/stupidsim/stupidsim-guest" "${prefix}/libexec/stupidsim/stupidsim-guest"
 install -m 0644 "${here}/share/stupidsim/version" "${prefix}/share/stupidsim/version"
 echo "installed stupidsim $(cat "${here}/share/stupidsim/version") to ${prefix}/bin/stupidsim"

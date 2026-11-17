@@ -1,0 +1,617 @@
+#!/usr/bin/env python3
+"""stupidsim-linux: sets up x86Sim's iOS simulator on Linux for stupidsim, fast enough for throwaway
+machines (cloud agent sessions, CI), and records what an app needs from the iOS runtime.
+
+    stupidsim-linux setup [--app NAME ...] [--device NAME] [--runtime RUNTIME] [--no-boot]
+        Install x86Sim, fetch the runtime's base and the named apps' parts from the store, restore
+        the translation cache and a booted-once device, boot it and wait for the home screen.
+    stupidsim-linux boot [--device NAME] [--metal auto|gpu|software]
+    stupidsim-linux shutdown [--device NAME]
+    stupidsim-linux trace begin [--device NAME]
+        Shut the device down, mark every runtime file unread, and boot it again. Then use the app.
+    stupidsim-linux trace end NAME [--base base]
+        Write manifests/NAME.txt: the runtime files read since `trace begin`, less those in --base.
+    stupidsim-linux store build [--device NAME] [--manifest NAME ...]
+        From a machine with the whole runtime: write the store's files for this runtime to
+        $STUPIDSIM_STORE_DIR (skeleton, a pack per manifest, translation cache, device template).
+    stupidsim-linux store publish
+        Upload $STUPIDSIM_STORE_DIR to the store.
+    stupidsim-linux store presign KEY [--hours N]
+        A time-limited GET URL for one object, for trying setup without store credentials.
+
+The store is an S3-compatible bucket (a private Cloudflare R2 bucket): $STUPIDSIM_STORE_URL is the
+bucket's endpoint URL (https://<account>.r2.cloudflarestorage.com/<bucket>), with
+$STUPIDSIM_STORE_KEY_ID and $STUPIDSIM_STORE_SECRET. Requests are signed by curl (--aws-sigv4).
+It holds Apple's simulator runtime, so it must stay private. Layout, per runtime build:
+
+    runtimes/<runtime>/skeleton.tar.zst      every directory and symlink, and the files outside
+                                             RuntimeRoot (the simruntime's own plists)
+    runtimes/<runtime>/packs/<name>.tar.zst  the files a manifest lists (base, then one per app)
+    runtimes/<runtime>/manifests/<name>.txt  those lists
+    runtimes/<runtime>/warm/jitcache.tar.zst x86Sim's translation cache for the runtime
+    runtimes/<runtime>/warm/device.tar.zst   a device that has booted once on it
+    runtimes/<runtime>/warm/device.json      that device's original path and name
+    current.json                             {"runtime": ..., "x86sim": ...}
+
+Only Python's standard library, curl, tar and zstd are used. Verified with x86Sim 0.3.0 and the iOS
+27.2 runtime (24B8117) on Ubuntu 24.04.
+"""
+import argparse
+import concurrent.futures
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.parse
+
+X86SIM_VERSION = "0.3.0"
+X86SIM_SHA256 = "d697b6e73678c1dbfce8dabbd71fd5a7ef59b110675f9e3ac3cacd42af2e59c8"
+X86SIM_URL = f"https://github.com/x86sim/x86sim/releases/download/v{X86SIM_VERSION}/x86sim-{X86SIM_VERSION}-x86_64.AppImage"
+DEFAULT_DEVICE = "agent"
+DEFAULT_MODEL = "iPhone 17 Pro"
+# Inside a runtime's extracted/ directory, where the simulator's file system starts.
+RUNTIME_ROOT_PREFIX = "Library/Developer/CoreSimulator/Profiles/Runtimes/"
+# Files read before this time count as unread: trace begin sets every runtime file's access time to it.
+UNREAD_EPOCH = 946684800  # 2000-01-01
+
+
+def fail(message):
+    print(f"stupidsim-linux: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+def log(message):
+    print(message, flush=True)
+
+
+# ---------------------------------------------------------------- x86Sim on this machine
+
+def data_home():
+    return os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+
+
+def x86sim_data():
+    return os.environ.get("X86SIM_DATA") or os.path.join(data_home(), "x86sim")
+
+
+def x86sim_cache():
+    return os.environ.get("X86SIM_CACHE") or os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "x86sim")
+
+
+def launcher():
+    """x86Sim's extracted AppRun, as stupidsim finds it (see Host/X86Sim/X86SimInstall.swift)."""
+    return os.environ.get("STUPIDSIM_X86SIM") or os.path.join(data_home(), "stupidsim", "x86sim", "AppRun")
+
+
+def device_dir(name):
+    return os.path.join(x86sim_data(), "var", "device-a64" if name in ("", "default") else f"device-a64-{name}")
+
+
+def run_x86sim(args, device=None, env=None, check=True, capture=False):
+    environment = dict(os.environ, SHELL="/bin/bash")
+    if device:
+        environment.update(X86SIM_DEVICE=device, A64_DEVICE=device)
+    environment.update(env or {})
+    result = subprocess.run([launcher()] + args, env=environment, text=True,
+                            stdout=subprocess.PIPE if capture else None, stderr=subprocess.STDOUT if capture else None)
+    if check and result.returncode != 0:
+        fail(f"x86sim {' '.join(args)} failed with status {result.returncode}" + (f": {result.stdout[-2000:]}" if capture else ""))
+    return result
+
+
+def install_x86sim():
+    """The pinned AppImage from x86Sim's GitHub release, checked and extracted once."""
+    target = launcher()
+    if os.path.exists(target):
+        return
+    if os.environ.get("STUPIDSIM_X86SIM"):
+        fail(f"STUPIDSIM_X86SIM names {target}, which does not exist")
+    root = os.path.dirname(target)
+    os.makedirs(os.path.dirname(root), exist_ok=True)
+    image = root + ".AppImage"
+    log(f"downloading x86Sim {X86SIM_VERSION}")
+    subprocess.run(["curl", "-fsSL", "-o", image + ".part", X86SIM_URL], check=True)
+    if sha256_file(image + ".part") != X86SIM_SHA256:
+        os.remove(image + ".part")
+        fail(f"the x86Sim download does not match {X86SIM_VERSION}'s published checksum")
+    os.chmod(image + ".part", 0o755)
+    os.replace(image + ".part", image)
+    scratch = tempfile.mkdtemp(dir=os.path.dirname(root))
+    subprocess.run([image, "--appimage-extract"], cwd=scratch, check=True, stdout=subprocess.DEVNULL)
+    shutil.rmtree(root, ignore_errors=True)
+    os.replace(os.path.join(scratch, "squashfs-root"), root)
+    shutil.rmtree(scratch, ignore_errors=True)
+    os.remove(image)  # extracted; the AppImage itself is never run (it leaves a FUSE mount per run)
+    log(f"x86Sim {X86SIM_VERSION} is at {root}")
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def runtime_dir(runtime):
+    return os.path.join(x86sim_data(), "runtimes", runtime)
+
+
+def runtime_root(runtime):
+    """RuntimeRoot inside extracted/, found by name since the simruntime's folder carries the version."""
+    extracted = os.path.join(runtime_dir(runtime), "extracted")
+    runtimes = os.path.join(extracted, RUNTIME_ROOT_PREFIX)
+    for name in sorted(os.listdir(runtimes)) if os.path.isdir(runtimes) else []:
+        candidate = os.path.join(runtimes, name, "Contents/Resources/RuntimeRoot")
+        if os.path.isdir(candidate):
+            return candidate
+    fail(f"no RuntimeRoot under {runtimes}")
+
+
+def device_runtime(device):
+    with open(os.path.join(device, "runtime")) as f:
+        return f.read().strip()
+
+
+def is_booted(device):
+    import socket
+    sock = os.path.realpath(os.path.join(device, "data", "simhid.sock"))
+    try:
+        with socket.socket(socket.AF_UNIX) as s:
+            s.connect(sock)
+        return True
+    except OSError:
+        return False
+
+
+def vulkan_env(metal):
+    """Metal on the GPU's Vulkan driver, on lavapipe (Vulkan on the CPU), or x86Sim's software renderer.
+    WSL's dozen drew corrupt frames (x86Sim 0.3.0), so auto prefers lavapipe on WSL and wherever
+    there is no GPU."""
+    lavapipe = "/usr/share/vulkan/icd.d/lvp_icd.json"
+    gpu = os.path.exists("/dev/dri") and not os.path.exists("/dev/dxg")
+    if metal == "auto":
+        metal = "gpu" if gpu else "lavapipe" if os.path.exists(lavapipe) else "software"
+    if metal == "software":
+        return {"X86SIM_METAL": "0"}
+    if metal == "gpu":
+        return {"X86SIM_METAL": "all"}
+    if not os.path.exists(lavapipe):
+        fail("--metal lavapipe needs Mesa's lavapipe (apt install mesa-vulkan-drivers)")
+    return {"X86SIM_METAL": "all", "VK_DRIVER_FILES": lavapipe, "VK_ICD_FILENAMES": lavapipe}
+
+
+def boot(name, metal="auto", timeout=900):
+    device = device_dir(name)
+    if not os.path.isdir(device):
+        fail(f"no device {name} at {device}")
+    if is_booted(device):
+        log(f"{name} is already booted")
+        return
+    started = time.time()
+    env = dict(vulkan_env(metal), A64_KEEP="1")
+    run_x86sim(["shell", "-c", "cli/libexec/arm64/boot-a64.sh"], device=device, env=env)
+    run_x86sim(["x86sim", "wait", "home", str(timeout)], device=device)
+    if not is_booted(device):
+        fail(f"{name} reached the home screen but its input socket does not answer")
+    log(f"{name} booted in {time.time() - started:.0f} s")
+
+
+def shutdown(name):
+    device = device_dir(name)
+    run_x86sim(["shell", "-c", "cli/libexec/arm64/boot-a64.sh"], device=device, env={"A64_STOP_ONLY": "1"})
+    for _ in range(60):
+        if not is_booted(device):
+            return
+        time.sleep(0.5)
+    fail(f"{name} is still answering after being stopped")
+
+
+# ---------------------------------------------------------------- tracing
+
+def set_access_times(root, when):
+    count = 0
+    for directory, _, files in os.walk(root):
+        for name in files:
+            path = os.path.join(directory, name)
+            if os.path.islink(path):
+                continue
+            os.utime(path, ns=(when * 10**9, os.lstat(path).st_mtime_ns), follow_symlinks=False)
+            count += 1
+    return count
+
+
+def check_access_times_record(root):
+    """A file system mounted noatime records no reads, which would make every trace empty."""
+    for directory, _, files in os.walk(root):
+        for name in files:
+            path = os.path.join(directory, name)
+            if os.path.islink(path) or os.path.getsize(path) == 0:
+                continue
+            with open(path, "rb") as f:
+                f.read(1)
+            if os.stat(path).st_atime <= UNREAD_EPOCH + 86400:
+                fail(f"reading {path} did not update its access time: the file system is mounted noatime, so reads cannot be traced")
+            os.utime(path, ns=(UNREAD_EPOCH * 10**9, os.lstat(path).st_mtime_ns))
+            return
+
+
+def trace_begin(name):
+    device = device_dir(name)
+    root = runtime_root(device_runtime(device))
+    if is_booted(device):
+        log(f"stopping {name}")
+        shutdown(name)
+    count = set_access_times(root, UNREAD_EPOCH)
+    check_access_times_record(root)
+    log(f"marked {count} runtime files unread; booting {name}")
+    boot(name)
+    log("now use the app the way its tests will, then run: stupidsim-linux trace end <name>")
+
+
+def read_since_trace(root):
+    """Leaves out x86Sim's own per-device files, which it writes into the runtime at boot
+    (LaunchAngels/.x86sim-device-a64-<name>/...) and removes again: they are not Apple's, and
+    they come and go with the device."""
+    read = []
+    for directory, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if not d.startswith(".x86sim-")]
+        for name in files:
+            path = os.path.join(directory, name)
+            if not os.path.islink(path) and os.stat(path, follow_symlinks=False).st_atime > UNREAD_EPOCH + 86400:
+                read.append(os.path.relpath(path, root))
+    return sorted(read)
+
+
+def manifests_dir():
+    return os.environ.get("STUPIDSIM_MANIFESTS") or os.path.join(data_home(), "stupidsim", "manifests")
+
+
+def read_manifest(runtime, name):
+    path = os.path.join(manifests_dir(), runtime, f"{name}.txt")
+    if not os.path.exists(path):
+        fail(f"no manifest {name} for {runtime} at {path}")
+    with open(path) as f:
+        return [line.rstrip("\n") for line in f if line.strip() and not line.startswith("#")]
+
+
+def trace_end(trace_name, device_name, base):
+    device = device_dir(device_name)
+    runtime = device_runtime(device)
+    root = runtime_root(runtime)
+    read = read_since_trace(root)
+    skip = set(read_manifest(runtime, base)) if base else set()
+    paths = [p for p in read if p not in skip]
+    size = sum(os.path.getsize(os.path.join(root, p)) for p in paths)
+    out = os.path.join(manifests_dir(), runtime, f"{trace_name}.txt")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w") as f:
+        f.write(f"# runtime files read while tracing {trace_name} on {runtime}"
+                + (f", less those in {base}" if base else "") + "; paths under RuntimeRoot\n")
+        f.writelines(p + "\n" for p in paths)
+    log(f"{out}: {len(paths)} files, {size / 1e9:.2f} GB")
+
+
+# ---------------------------------------------------------------- the store
+
+def store_env():
+    url = os.environ.get("STUPIDSIM_STORE_URL", "").rstrip("/")
+    key, secret = os.environ.get("STUPIDSIM_STORE_KEY_ID"), os.environ.get("STUPIDSIM_STORE_SECRET")
+    if not url:
+        fail("STUPIDSIM_STORE_URL is not set (the store bucket's S3 endpoint, https://<account>.r2.cloudflarestorage.com/<bucket>)")
+    return url, key, secret
+
+
+def curl_store(key, extra, signed=True):
+    url, key_id, secret = store_env()
+    command = ["curl", "-fsS", "--retry", "3", "--retry-all-errors"]
+    if signed:
+        if not key_id or not secret:
+            fail("STUPIDSIM_STORE_KEY_ID and STUPIDSIM_STORE_SECRET are not set")
+        command += ["--aws-sigv4", "aws:amz:auto:s3", "--user", f"{key_id}:{secret}"]
+    return command + extra + [f"{url}/{urllib.parse.quote(key)}"]
+
+
+def store_get(key):
+    return subprocess.run(curl_store(key, []), check=True, stdout=subprocess.PIPE).stdout
+
+
+def object_url(key):
+    """A presigned URL in $STUPIDSIM_STORE_URLS (a JSON map of key to URL) wins over signing, so
+    setup can be tried with time-limited links and no credentials."""
+    links = json.loads(os.environ.get("STUPIDSIM_STORE_URLS") or "{}")
+    return links.get(key)
+
+
+def fetch_and_extract(key, destination):
+    """Streams a .tar.zst from the store into a directory, never holding the archive on disk."""
+    os.makedirs(destination, exist_ok=True)
+    link = object_url(key)
+    download = ["curl", "-fsS", "--retry", "3", "--retry-all-errors", link] if link else curl_store(key, [])
+    curl = subprocess.Popen(download, stdout=subprocess.PIPE)
+    tar = subprocess.run(["tar", "--zstd", "-xf", "-", "-C", destination], stdin=curl.stdout)
+    curl.stdout.close()
+    if curl.wait() != 0 or tar.returncode != 0:
+        fail(f"could not fetch and unpack {key} (curl {curl.returncode}, tar {tar.returncode})")
+    return key
+
+
+def current():
+    link = object_url("current.json")
+    if link:
+        return json.loads(subprocess.run(["curl", "-fsS", link], check=True, stdout=subprocess.PIPE).stdout)
+    return json.loads(store_get("current.json"))
+
+
+def pack(source, paths_file, out):
+    """tar of the listed paths under source, zstd compressed on every core. A listed file that is
+    gone (one x86Sim made for a boot and removed) is reported and left out."""
+    with open(paths_file) as f:
+        paths = [line.rstrip("\n") for line in f if line.strip()]
+    present = [p for p in paths if os.path.lexists(os.path.join(source, p))]
+    if len(present) != len(paths):
+        log(f"{out}: {len(paths) - len(present)} listed paths are gone and left out, e.g. {next(p for p in paths if p not in set(present))}")
+        with open(paths_file, "w") as f:
+            f.writelines(p + "\n" for p in present)
+    with open(out, "wb") as f:
+        tar = subprocess.Popen(["tar", "-C", source, "--no-recursion", "-T", paths_file, "-cf", "-"], stdout=subprocess.PIPE)
+        zstd = subprocess.run(["zstd", "-T0", "-6", "-q", "-c"], stdin=tar.stdout, stdout=f)
+        tar.stdout.close()
+        if tar.wait() != 0 or zstd.returncode != 0:
+            fail(f"packing {out} failed")
+    log(f"{out}: {os.path.getsize(out) / 1e9:.2f} GB")
+
+
+def store_build(device_name, manifests):
+    out_root = os.environ.get("STUPIDSIM_STORE_DIR") or fail("STUPIDSIM_STORE_DIR is not set (where to write the store's files)")
+    device = device_dir(device_name)
+    runtime = device_runtime(device)
+    extracted = os.path.join(runtime_dir(runtime), "extracted")
+    root = runtime_root(runtime)
+    root_rel = os.path.relpath(root, extracted)
+    out = os.path.join(out_root, "runtimes", runtime)
+    os.makedirs(os.path.join(out, "packs"), exist_ok=True)
+    os.makedirs(os.path.join(out, "manifests"), exist_ok=True)
+    os.makedirs(os.path.join(out, "warm"), exist_ok=True)
+    if is_booted(device):
+        fail(f"shut {device_name} down first (stupidsim-linux shutdown --device {device_name}); a running device's data is not consistent")
+
+    with tempfile.NamedTemporaryFile("w", delete=False) as listing:
+        for directory, dirs, files in os.walk(extracted):
+            rel = os.path.relpath(directory, extracted)
+            listing.write(rel + "\n")
+            for name in dirs + files:
+                path = os.path.join(directory, name)
+                inside = os.path.relpath(path, extracted)
+                if os.path.islink(path) or (name in files and not inside.startswith(root_rel + "/")):
+                    listing.write(inside + "\n")
+    pack(extracted, listing.name, os.path.join(out, "skeleton.tar.zst"))
+    os.remove(listing.name)
+
+    for name in manifests:
+        paths = read_manifest(runtime, name)
+        with tempfile.NamedTemporaryFile("w", delete=False) as listing:
+            listing.writelines(os.path.join(root_rel, p) + "\n" for p in paths)
+        pack(extracted, listing.name, os.path.join(out, "packs", f"{name}.tar.zst"))
+        os.remove(listing.name)
+        shutil.copy(os.path.join(manifests_dir(), runtime, f"{name}.txt"), os.path.join(out, "manifests", f"{name}.txt"))
+
+    build = runtime.split("-")[2]
+    cache = os.path.join(x86sim_cache(), f"jc-{build}")
+    with tempfile.NamedTemporaryFile("w", delete=False) as listing:
+        # All of it but locks: the AOT image, its work directory (installing an app adds to the
+        # image from it) and each process's live translations.
+        for directory, _, files in os.walk(cache):
+            rel = os.path.relpath(directory, x86sim_cache())
+            listing.write(rel + "\n")
+            listing.writelines(os.path.join(rel, n) + "\n" for n in files if n != "lock" and not n.endswith(".lock"))
+    pack(x86sim_cache(), listing.name, os.path.join(out, "warm", "jitcache.tar.zst"))
+    os.remove(listing.name)
+
+    with tempfile.NamedTemporaryFile("w", delete=False) as listing:
+        for directory, dirs, files in os.walk(device):
+            rel = os.path.relpath(directory, os.path.dirname(device))
+            # Sockets do not survive a copy; the next boot makes them again. os_log's uuidtext
+            # tables hold the device's old path in a form device-repath.py cannot rewrite, and the
+            # device rebuilds them.
+            if "/data/var/db/uuidtext" in "/" + rel:
+                continue
+            listing.writelines(os.path.join(rel, n) + "\n" for n in files if not n.endswith(".sock"))
+            listing.writelines(os.path.join(rel, n) + "\n" for n in dirs if os.path.islink(os.path.join(directory, n)))
+            listing.write(rel + "\n")
+    pack(os.path.dirname(device), listing.name, os.path.join(out, "warm", "device.tar.zst"))
+    os.remove(listing.name)
+    with open(os.path.join(out, "warm", "device.json"), "w") as f:
+        json.dump({"path": device, "directory": os.path.basename(device)}, f)
+
+    with open(os.path.join(out_root, "current.json"), "w") as f:
+        json.dump({"runtime": runtime, "x86sim": X86SIM_VERSION}, f)
+    log(f"store files for {runtime} are in {out_root}; upload them with: stupidsim-linux store publish")
+
+
+def store_publish():
+    out_root = os.environ.get("STUPIDSIM_STORE_DIR") or fail("STUPIDSIM_STORE_DIR is not set")
+    keys = []
+    for directory, _, files in os.walk(out_root):
+        keys += [os.path.relpath(os.path.join(directory, n), out_root) for n in files]
+    for key in sorted(keys, key=lambda k: k == "current.json"):  # current.json last, once its files are there
+        size = os.path.getsize(os.path.join(out_root, key))
+        subprocess.run(curl_store(key, ["-T", os.path.join(out_root, key)]), check=True)
+        log(f"uploaded {key} ({size / 1e9:.2f} GB)")
+
+
+def presign(key, hours):
+    """An AWS SigV4 query-string signature, which R2 accepts, made with the standard library."""
+    import datetime
+    import hmac
+    url, key_id, secret = store_env()
+    parsed = urllib.parse.urlparse(f"{url}/{urllib.parse.quote(key)}")
+    now = datetime.datetime.now(datetime.timezone.utc)
+    stamp, day = now.strftime("%Y%m%dT%H%M%SZ"), now.strftime("%Y%m%d")
+    scope = f"{day}/auto/s3/aws4_request"
+    query = urllib.parse.urlencode(sorted({
+        "X-Amz-Algorithm": "AWS4-HMAC-SHA256", "X-Amz-Credential": f"{key_id}/{scope}", "X-Amz-Date": stamp,
+        "X-Amz-Expires": str(hours * 3600), "X-Amz-SignedHeaders": "host"}.items()), quote_via=urllib.parse.quote)
+    request = "\n".join(["GET", parsed.path, query, f"host:{parsed.netloc}\n", "host", "UNSIGNED-PAYLOAD"])
+    to_sign = "\n".join(["AWS4-HMAC-SHA256", stamp, scope, hashlib.sha256(request.encode()).hexdigest()])
+    signing = f"AWS4{secret}".encode()
+    for part in (day, "auto", "s3", "aws4_request"):
+        signing = hmac.new(signing, part.encode(), hashlib.sha256).digest()
+    signature = hmac.new(signing, to_sign.encode(), hashlib.sha256).hexdigest()
+    print(f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{query}&X-Amz-Signature={signature}")
+
+
+# ---------------------------------------------------------------- setup
+
+def ensure_tools():
+    missing = [tool for tool in ("curl", "tar", "zstd") if not shutil.which(tool)]
+    if missing and os.geteuid() == 0 and shutil.which("apt-get"):
+        log(f"installing {' '.join(missing)}")
+        # A fresh cloud VM's package lists are stale; install fails until they are refreshed.
+        subprocess.run(["apt-get", "update", "-qq"], check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(["apt-get", "install", "-y", "-qq"] + missing, check=True, stdout=subprocess.DEVNULL)
+        missing = [tool for tool in missing if not shutil.which(tool)]
+    if missing:
+        fail(f"{' '.join(missing)} {'is' if len(missing) == 1 else 'are'} missing")
+
+
+def apply_features(device, preset):
+    """x86Sim's feature presets turn off parts of the system a test device rarely needs, each with
+    its memory cost: lean drops the wallpaper, Spotlight, Siri and widgets. Wallet costs about
+    190 MB on every boot and is off too unless the preset is full. A 16 GB cloud VM ran out of
+    memory booting with everything on (x86Sim 0.3.0)."""
+    run_x86sim(["aot", "--device", device, "features", "preset", preset], capture=True)
+    if preset != "full":
+        run_x86sim(["aot", "--device", device, "features", "set", "wallet", "off"], capture=True)
+
+
+def setup(apps, name, no_boot, metal, runtime=None, features="lean"):
+    started = time.time()
+    ensure_tools()
+    info = current()
+    runtime = runtime or info["runtime"]
+    if info.get("x86sim") != X86SIM_VERSION:
+        fail(f"the store was built with x86Sim {info.get('x86sim')}, this is {X86SIM_VERSION}")
+    install_x86sim()
+    run_x86sim(["version"], capture=True)  # copies x86Sim's payload into its data directory once
+
+    base = f"runtimes/{runtime}"
+    rdir = runtime_dir(runtime)
+    device = device_dir(name)
+    jobs = []
+    marker = os.path.join(rdir, ".stupidsim-parts")
+    have = set(open(marker).read().split()) if os.path.exists(marker) else set()
+    parts = ["skeleton", "base"] + list(apps)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+        for part in parts:
+            if part in have:
+                continue
+            key = f"{base}/skeleton.tar.zst" if part == "skeleton" else f"{base}/packs/{part}.tar.zst"
+            jobs.append(pool.submit(fetch_and_extract, key, os.path.join(rdir, "extracted")))
+        if not os.path.isdir(os.path.join(x86sim_cache(), f"jc-{runtime.split('-')[2]}")):
+            jobs.append(pool.submit(fetch_and_extract, f"{base}/warm/jitcache.tar.zst", x86sim_cache()))
+        fresh_device = not os.path.isdir(device)
+        if fresh_device:
+            scratch = tempfile.mkdtemp(dir=os.path.join(x86sim_data(), "var") if os.path.isdir(os.path.join(x86sim_data(), "var")) else None)
+            jobs.append(pool.submit(fetch_and_extract, f"{base}/warm/device.tar.zst", scratch))
+        for job in concurrent.futures.as_completed(jobs):
+            log(f"fetched {job.result()} ({time.time() - started:.0f} s)")
+    with open(marker, "w") as f:
+        f.write(" ".join(sorted(have | set(parts))))
+    link = os.path.join(rdir, "RuntimeRoot")
+    if not os.path.islink(link):
+        os.symlink(os.path.relpath(runtime_root_unchecked(rdir), rdir), link)
+
+    if fresh_device:
+        template = json.loads(object_text(f"{base}/warm/device.json"))
+        os.makedirs(os.path.dirname(device), exist_ok=True)
+        os.replace(os.path.join(scratch, template["directory"]), device)
+        shutil.rmtree(scratch, ignore_errors=True)
+        with open(os.path.join(device, "name"), "w") as f:
+            f.write(name + "\n")
+        # The device's stores keep its absolute path; x86Sim's own tool moves them (device-a64.py does the same for clones).
+        repath = run_x86sim(["shell", "-c", f'python3 cli/libexec/arm64/device-repath.py "{device}" "{template["path"]}"'], capture=True, check=False)
+        if repath.returncode != 0:
+            fail(f"moving the device template's paths failed: {repath.stdout[-1500:]}")
+    apply_features(device, features)
+    log(f"set up in {time.time() - started:.0f} s")
+    if not no_boot:
+        boot(name, metal)
+        udid = next((line.split("=", 1)[1] for line in open(os.path.join(device, "sim.env")) if line.startswith("SIMULATOR_UDID=")), "?")
+        log(f"ready: device {name}, UDID {udid}, {time.time() - started:.0f} s after setup started")
+
+
+def runtime_root_unchecked(rdir):
+    runtimes = os.path.join(rdir, "extracted", RUNTIME_ROOT_PREFIX)
+    for name in sorted(os.listdir(runtimes)):
+        candidate = os.path.join(runtimes, name, "Contents/Resources/RuntimeRoot")
+        if os.path.isdir(candidate):
+            return candidate
+    fail(f"the skeleton has no RuntimeRoot under {runtimes}")
+
+
+def object_text(key):
+    link = object_url(key)
+    if link:
+        return subprocess.run(["curl", "-fsS", link], check=True, stdout=subprocess.PIPE).stdout.decode()
+    return store_get(key).decode()
+
+
+def main():
+    parser = argparse.ArgumentParser(prog="stupidsim-linux", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    commands = parser.add_subparsers(dest="command", required=True)
+    p = commands.add_parser("setup")
+    p.add_argument("--app", action="append", default=[], help="an app manifest to fetch as well (repeatable)")
+    p.add_argument("--device", default=DEFAULT_DEVICE)
+    p.add_argument("--no-boot", action="store_true")
+    p.add_argument("--metal", choices=["auto", "gpu", "lavapipe", "software"], default="auto")
+    p.add_argument("--runtime", help="a runtime in the store, such as ios-27.2-24B8117-arm64 (default: current.json's)")
+    p.add_argument("--features", choices=["full", "lean", "minimal"], default="lean",
+                   help="x86Sim's feature preset for the device; lean and minimal also turn Wallet off (default: lean)")
+    p = commands.add_parser("boot")
+    p.add_argument("--device", default=DEFAULT_DEVICE)
+    p.add_argument("--metal", choices=["auto", "gpu", "lavapipe", "software"], default="auto")
+    p = commands.add_parser("shutdown")
+    p.add_argument("--device", default=DEFAULT_DEVICE)
+    p = commands.add_parser("trace")
+    p.add_argument("phase", choices=["begin", "end"])
+    p.add_argument("name", nargs="?")
+    p.add_argument("--device", default=DEFAULT_DEVICE)
+    p.add_argument("--base", help="leave out the files of this manifest (normally base)")
+    p = commands.add_parser("store")
+    p.add_argument("action", choices=["build", "publish", "presign"])
+    p.add_argument("key", nargs="?")
+    p.add_argument("--device", default=DEFAULT_DEVICE)
+    p.add_argument("--manifest", action="append", default=[])
+    p.add_argument("--hours", type=int, default=6)
+    a = parser.parse_args()
+
+    if a.command == "setup":
+        setup(a.app, a.device, a.no_boot, a.metal, a.runtime, a.features)
+    elif a.command == "boot":
+        boot(a.device, a.metal)
+    elif a.command == "shutdown":
+        shutdown(a.device)
+    elif a.command == "trace":
+        if a.phase == "begin":
+            trace_begin(a.device)
+        else:
+            if not a.name:
+                fail("trace end needs the manifest's name")
+            trace_end(a.name, a.device, a.base)
+    elif a.action == "build":
+        store_build(a.device, a.manifest or ["base"])
+    elif a.action == "publish":
+        store_publish()
+    else:
+        if not a.key:
+            fail("store presign needs the object's key")
+        presign(a.key, a.hours)
+
+
+if __name__ == "__main__":
+    main()

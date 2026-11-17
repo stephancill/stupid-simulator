@@ -36,6 +36,11 @@ there reports x86Sim, the in-device helper and each device's frames. Differences
   instant.
 - `notification expand` and `reply` are refused; a payload with `"mutable-content": 1` needs
   `--skip-service-extension`. `view` opens x86Sim's own window.
+- On a throwaway machine (a cloud agent session, CI) the environment's setup has normally run
+  `linux/cloud-setup.sh`; start the device with `stupidsim-linux boot` (seconds to a few minutes)
+  and install the app under test with x86Sim's `install`. Only the runtime files the base and the
+  listed apps need are there: an app that never shows its UI after launching may need a part that
+  was not recorded (docs/runbooks/app-manifest.md).
 - The `scripts/` here wrap `xcrun simctl` and do not run on Linux. x86Sim's own command line
   (`~/.local/share/stupidsim/x86sim/AppRun x86sim launch|install|openurl|location|privacy ...`,
   with `X86SIM_DEVICE` set to the device's directory) follows simctl's.

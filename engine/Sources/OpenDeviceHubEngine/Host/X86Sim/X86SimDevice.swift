@@ -16,10 +16,14 @@ public struct X86SimDevice: Sendable, Hashable {
     /// The screen in pixels and its scale, from the same environment.
     public let screenPixels: CGSize?
     public let scale: Double?
+    /// The ring as sim.env names it, seen from inside the device (/Volumes/SystemRoot/...).
+    let ringInDevice: String?
 
     /// The directory under x86Sim's data that holds devices, and the prefix every device's
     /// directory starts with.
     static let devicesPath = "var"
+    /// Linux's root as Darling shows it inside the device.
+    static let systemRoot = "/Volumes/SystemRoot"
     static let directoryPrefix = "device-a64"
 
     public init(directory: URL) throws {
@@ -40,6 +44,7 @@ public struct X86SimDevice: Sendable, Hashable {
             screenPixels = nil
         }
         scale = environment["SIMULATOR_MAINSCREEN_SCALE"].flatMap(Double.init)
+        ringInDevice = environment["SIMFB_RING"]
     }
 
     /// The device's own file system, which the guest sees as its home.
@@ -51,10 +56,16 @@ public struct X86SimDevice: Sendable, Hashable {
     /// Where simhid writes the orientation the device ends up in.
     public var orientationFile: URL { dataDirectory.appending(path: "orientation") }
 
-    /// The shared-memory ring simfb publishes every frame to. x86Sim's `config.sh` names it after the
-    /// directory: `device-a64` gives `x86sim-a64-simfb.ring`, `device-a64-<name>` gives
-    /// `x86sim-a64-<name>-simfb.ring`.
+    /// The shared-memory ring simfb publishes every frame to: where sim.env's SIMFB_RING puts it
+    /// (`/run/user/<uid>/...`, as boot-a64.sh reads it), else the `/dev/shm` link x86Sim's
+    /// `config.sh` names after the directory (`device-a64` gives `x86sim-a64-simfb.ring`,
+    /// `device-a64-<name>` gives `x86sim-a64-<name>-simfb.ring`). That link is named after the
+    /// device and not the user, so with two users each with a device called agent, the second read
+    /// the first one's link and could not open it.
     public var frameRing: URL {
+        if let ringInDevice, ringInDevice.hasPrefix(Self.systemRoot) {
+            return URL(fileURLWithPath: String(ringInDevice.dropFirst(Self.systemRoot.count)))
+        }
         let directoryName = directory.lastPathComponent
         let tail = directoryName.hasPrefix("device-") ? String(directoryName.dropFirst("device-".count)) : directoryName
         return URL(fileURLWithPath: "/dev/shm/x86sim-\(tail)-simfb.ring")
