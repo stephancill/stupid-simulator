@@ -59,6 +59,12 @@ $A x86sim launch com.example.myapp
 stupidsim ui-tree booted --labelled      # then the usual loop
 ```
 
+- To change an app's code and check it, use [stupid-app](https://github.com/stephancill/stupid-app-cli)
+  (no Mac needed): its `scripts/cloud-setup.sh` sets up everything above plus the Swift
+  toolchain and iOS SDKs in one line, and in the app's directory `stupid-app run --simulator`
+  builds, installs and launches it here, failing with the app's output if it never reaches the
+  front (an edit-and-run cycle takes seconds). Let a freshly built app settle a few seconds
+  before relying on gestures: its first run is translated live.
 - `STUPIDSIM_APPS` names the apps whose runtime files to fetch besides the base. **An app with no
   manifest in the store installs fine but never comes to the front, with no crash report.** If
   Settings opens and your app does not, that is the cause: record one
