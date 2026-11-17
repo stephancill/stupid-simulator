@@ -76,12 +76,32 @@ there at all. `linux/stupidsim-linux` (Python's standard library, curl, tar and 
   (`mesa-vulkan-drivers`) when it runs as root. It does not boot: Claude Code's setup cache keeps
   files, not processes.
 - Adding an iOS version is `docs/runbooks/new-ios-version.md`.
-- **Not yet working: booting in a Claude Code cloud session.** Setup there took 102 s, but the
-  boot ran the 16 GB VM (no swap) out of memory within a minute: six or more `xpcproxy_sim`
-  processes held 1.3 to 2.1 GB each, which never happens on the WSL box (+3.1 GB for a whole
-  boot). The Lean preset did not change it. Also measured there: no systemd user manager (so
-  x86Sim's `X86SIM_MEM_MAX` is not applied), no `fusermount`, and mtlvk did not start, so the
-  device rendered in software. The cause is not known yet.
+- **Setup unpacks with `tar --no-same-owner`, and refuses a translation cache owned by another
+  user.** Booting in a Claude Code cloud session first ran the 16 GB VM (no swap) out of memory
+  within a minute: a dozen `xpcproxy_sim` processes held 1.0 to 2.1 GB of private anonymous memory
+  each. Setup runs there as root, and GNU tar as root keeps the archive's owner, so the cache
+  directory belonged to the uid that built the store. x86Sim's processes could then not create the
+  lock and the relocated shared copy (`<key>.aot.<layout>.map`) next to the AOT image, so each one
+  read the whole image into private memory. On the WSL box, the same boot with the cache directory
+  made unwritable to the booting user reproduced it exactly: +12.5 GB within seconds, 1.2 GB
+  private per `xpcproxy_sim`, and no `.map` or `.lock` files. Ruled out on the way: seccomp (the
+  cloud VM has none, and `personality(ADDR_NO_RANDOMIZE)` sticks there), and a stale `.map` (the
+  store ships none; its name hashes the image's inode and mtime, so a shipped one could never
+  match). With ASLR left on (`A64_ENV=X86SIM_A64_NOASLR=0`), apps and backboardd still load the
+  image privately: +11.5 GB on the WSL box, 2.6 GB each.
+- **`boot` creates `/run/user/<uid>` when it is missing.** x86Sim's `mksimdevice.py` puts the frame
+  ring there, and only systemd-logind creates the directory. In the cloud VM the device booted and
+  its accessibility tree worked, but simfb had nowhere to write frames, so `screenshot` failed with
+  the ring unreadable. When the directory cannot be created (no root, no logind), `boot` fails and
+  names the command that fixes it.
+- With both fixes, a fresh Claude Code cloud session (4 vCPU, 16 GB, no swap) with
+  `STUPIDSIM_APPS=stupidsocial` set up in 87 s and booted to the home screen in 105 s. StupidSocial
+  installed, launched with `-demoData` and showed its tree in 18 s; `tap --label Settings --verify`
+  (3 s), `wait --label "Add Account"` and screenshots worked, with 4.2 GB in use. Settings opened in
+  6 s. Without the app's manifest (`STUPIDSIM_APPS` unset) the install still succeeds, but the app
+  never comes to the front and leaves no crash report.
+- Also measured in the cloud VM: no systemd user manager (so x86Sim's `X86SIM_MEM_MAX` is not
+  applied) and no `fusermount`.
 
 ## `stupidsim` on Linux, through x86Sim
 

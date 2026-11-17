@@ -35,7 +35,7 @@ get() {
 
 if ! command -v stupidsim-linux >/dev/null; then
   work="$(mktemp -d)"
-  get packages/stupidsim-linux-x86_64.tar.gz | tar xz -C "${work}"
+  get packages/stupidsim-linux-x86_64.tar.gz | tar xz --no-same-owner -C "${work}"
   "${work}"/stupidsim-*/install.sh --prefix "${prefix}" --no-x86sim
   rm -rf "${work}"
   export PATH="${prefix}/bin:${PATH}"

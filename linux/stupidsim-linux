@@ -185,6 +185,19 @@ def vulkan_env(metal):
     return {"X86SIM_METAL": "all", "VK_DRIVER_FILES": lavapipe, "VK_ICD_FILENAMES": lavapipe}
 
 
+def ensure_runtime_dir():
+    """simfb writes the frame ring to /run/user/<uid> (x86Sim's mksimdevice.py), which only systemd-logind creates.
+    Containers and VMs without it (Claude Code cloud sessions) booted fine but had no frames, so screenshots failed."""
+    path = f"/run/user/{os.getuid()}"
+    if os.path.isdir(path):
+        return
+    try:
+        os.makedirs(path, mode=0o700)
+    except OSError as error:
+        fail(f"{path} does not exist and could not be created ({error.strerror}); x86Sim writes the screen's frames "
+             f"there. Create it as root: mkdir -p {path} && chown {os.getuid()}:{os.getgid()} {path} && chmod 700 {path}")
+
+
 def boot(name, metal="auto", timeout=900):
     device = device_dir(name)
     if not os.path.isdir(device):
@@ -193,6 +206,7 @@ def boot(name, metal="auto", timeout=900):
         log(f"{name} is already booted")
         return
     started = time.time()
+    ensure_runtime_dir()
     env = dict(vulkan_env(metal), A64_KEEP="1")
     run_x86sim(["shell", "-c", "cli/libexec/arm64/boot-a64.sh"], device=device, env=env)
     run_x86sim(["x86sim", "wait", "home", str(timeout)], device=device)
@@ -333,11 +347,22 @@ def fetch_and_extract(key, destination):
     link = object_url(key)
     download = ["curl", "-fsS", "--retry", "3", "--retry-all-errors", link] if link else curl_store(key, [])
     curl = subprocess.Popen(download, stdout=subprocess.PIPE)
-    tar = subprocess.run(["tar", "--zstd", "-xf", "-", "-C", destination], stdin=curl.stdout)
+    # --no-same-owner: as root, tar keeps the archive's owner (the uid that built the store). x86Sim's processes then
+    # cannot create the translation cache's lock and shared image (.map) files, so every process loads its own private
+    # copy of the AOT image (about 1.2 GB each) and a 16 GB machine runs out of memory within seconds of booting.
+    tar = subprocess.run(["tar", "--zstd", "--no-same-owner", "-xf", "-", "-C", destination], stdin=curl.stdout)
     curl.stdout.close()
     if curl.wait() != 0 or tar.returncode != 0:
         fail(f"could not fetch and unpack {key} (curl {curl.returncode}, tar {tar.returncode})")
     return key
+
+
+def check_owned(directory):
+    """The translation cache must belong to the user who boots (see fetch_and_extract): a cache unpacked by an older
+    setup with the store builder's owner is refused rather than left to exhaust memory at boot."""
+    if os.path.isdir(directory) and os.stat(directory).st_uid != os.getuid():
+        fail(f"{directory} belongs to uid {os.stat(directory).st_uid}, not {os.getuid()}; x86Sim could not share its "
+             f"translation image and the boot would run out of memory. Fix it with: chown -R {os.getuid()}:{os.getgid()} {directory}")
 
 
 def current():
@@ -522,6 +547,7 @@ def setup(apps, name, no_boot, metal, runtime=None, features="lean"):
             log(f"fetched {job.result()} ({time.time() - started:.0f} s)")
     with open(marker, "w") as f:
         f.write(" ".join(sorted(have | set(parts))))
+    check_owned(os.path.join(x86sim_cache(), f"jc-{runtime.split('-')[2]}"))
     link = os.path.join(rdir, "RuntimeRoot")
     if not os.path.islink(link):
         os.symlink(os.path.relpath(runtime_root_unchecked(rdir), rdir), link)
