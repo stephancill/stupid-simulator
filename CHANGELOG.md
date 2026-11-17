@@ -3,7 +3,7 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
-## Unreleased
+## 0.6.0
 
 - `stupidsim` runs on Linux. It drives the iOS simulators of [x86Sim](https://github.com/x86sim/x86sim),
   which runs Apple's simulator runtimes on x86-64 Linux, with the same commands, arguments and
@@ -11,6 +11,13 @@ under it until the next heading becomes that version's release notes in the upda
   gestures, rotation, screenshots, the pasteboard, pushes and notification banners, and `--verify`.
   `stupidsim-<version>-linux-x86_64.tar.gz` installs it and fetches x86Sim. Expanding and replying
   to a notification are not available there yet.
+- A throwaway Linux machine, such as a Claude Code cloud session or a CI runner, gets a booted iOS
+  simulator in about three minutes with one command and no credentials:
+  `curl -fsSL https://raw.githubusercontent.com/stephancill/stupid-simulator/main/linux/cloud-setup.sh | STUPIDSIM_APPS="stupidsocial" bash`,
+  then `stupidsim-linux boot`. It fetches only the runtime files tests read, x86Sim's translation
+  cache and a device that has booted once, instead of 20 minutes and 36 GB from Apple. Measured in
+  a Claude Code cloud session (4 vCPU, 16 GB): setup 90 s, boot 105 s, an app on screen 18 s after
+  launch, 4.2 GB in use. The agent skill describes it.
 - The Dynamic Island no longer blinks in the viewer window and in recordings while an agent takes
   screenshots or verifies input. `stupidsim screenshot` and `--verify` used `simctl io screenshot`,
   which makes the device hide the island while it captures. They now read the screen directly, so
