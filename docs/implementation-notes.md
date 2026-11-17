@@ -228,7 +228,9 @@ in `skills/stupid-simulator/THIRD_PARTY.md`) and a Vision OCR skill.
   on Xcode 27 with an iOS 27.0 iPhone 17 Pro: after enrollment, a passkey was created and later
   used in an `ASWebAuthenticationSession` page, each prompt answered with the match notification.
   Each `notifyutil` call is a `simctl spawn`, about 1 to 5 seconds; the script gives up after 30
-  seconds, which a device that had stopped responding hit.
+  seconds, which a device that had stopped responding hit. An enrollment sent within seconds of
+  `sim_temp.py create` booting the device read back as not enrolled, so `--enroll`/`--unenroll`
+  set it again up to four times, two seconds apart, and then fail.
 
 ## Releases
 

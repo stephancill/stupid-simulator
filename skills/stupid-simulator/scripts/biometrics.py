@@ -23,6 +23,7 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 
 from common import resolve_udid
 
@@ -75,9 +76,17 @@ def main() -> None:
     try:
         udid = resolve_udid(args.udid)
         if args.enroll or args.unenroll:
-            set_enrolled(udid, args.enroll)
-            output = {"udid": udid, "enrolled": is_enrolled(udid)}
-            message = f"Biometrics {'enrolled' if output['enrolled'] else 'not enrolled'}"
+            # Right after a boot the change can be lost, so it is set again a few times before failing.
+            for attempt in range(4):
+                if attempt:
+                    time.sleep(2)
+                set_enrolled(udid, args.enroll)
+                if is_enrolled(udid) == args.enroll:
+                    break
+            else:
+                raise RuntimeError(f"the device didn't take the {'enrollment' if args.enroll else 'unenrollment'}; wait for it to finish booting and try again")
+            output = {"udid": udid, "enrolled": args.enroll}
+            message = f"Biometrics {'enrolled' if args.enroll else 'not enrolled'}"
         elif args.status:
             output = {"udid": udid, "enrolled": is_enrolled(udid)}
             message = f"Biometrics {'enrolled' if output['enrolled'] else 'not enrolled'}"
