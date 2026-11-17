@@ -310,6 +310,36 @@ Releases are cut locally; the full procedure is in [RELEASING.md](../RELEASING.m
   named a shell that exited straight after the command. `release` deletes only `tmp-` simulators
   not claimed by another live process, unless `--force`.
 
+### Why several simulators slow each other down
+
+- Measured on an M1 Pro with 16 GB and Xcode 27, iOS 27.0 (24A434): a fresh clone ran about 190
+  processes in 1.6 GB of physical footprint (top's memory column, which counts compressed pages);
+  simulators that had been up a while used 2.0 to 2.8 GB. With four booted the Mac had under 300 MB
+  free, 5 GB in the compressor, a load average of 280 to 560 with the CPU 60% idle (processes
+  waiting on page faults), and about 3,600 page-ins a second.
+- The runtime is mounted from an lzfse-compressed UDIF image, so each evicted page of it is
+  decompressed again by `diskimagesiod` when touched; it ran at about 100% CPU. Memory, not cores,
+  is what limits how many simulators run well.
+- No guest daemon is worth disabling: 132 launchd jobs shared 1.1 GB, mostly 10 to 20 MB each.
+  `launchctl disable` inside a simulator survives its reboots but is not carried by `simctl clone`,
+  so a template cannot hold it.
+- PosterBoard starts every wallpaper extension (about 15, 280 MB) in the minute or two after boot,
+  on fresh clones too. Sending them SIGTERM, PosterBoard started only the one shown again
+  (MercuryPosterExtension) and the home screen still drew its wallpaper; 249 to 258 MB came back.
+  `sim_temp.py create` does this in a detached `trim --wait`, which waits until the count of
+  extensions holds for 15 s (at most `IOS_SIM_POSTER_SETTLE`, 120 s), so create still returns in
+  seconds. It fails loudly if PosterBoard itself is gone afterwards.
+- CoreSimulator boots each device with `SIGTERMTimeout` 3 and `CrashOnSIGTERMTimeout` in
+  `data/var/run/launchd_bootstrap.plist` (CoreSimulator 1171.7). Under load daemons miss the 3 s,
+  so each shutdown writes a batch of crash reports (assistantd, intelligencetasksd, chronod, logd,
+  ...) that the host's ReportCrash symbolicates. `sim_temp.py` takes a lock around every shutdown so
+  agents shut down one at a time.
+- `reap` deletes `tmp-` simulators whose claim is missing or names an exited process, and with
+  `--all` shuts down (never deletes) other unclaimed booted simulators. A claim can name a shell
+  that has already exited while its agent still drives the simulator, so a booted simulator is left
+  alone while any host process other than the guest names its UDID (stupidsim, simctl, an agent's
+  shell) or for `--min-age` (`IOS_SIM_REAP_MIN_AGE`, 30 min) after `SIMULATOR_BOOT_TIME`.
+
 ## Agent oriented CLI
 
 - Every command that takes a UDID also takes `booted`, meaning the one booted simulator. With none
