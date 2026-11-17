@@ -13,7 +13,7 @@ and device settings; the `scripts/` here wrap them with token-light output.
 ## Setup
 
 ```bash
-stupidsim --version        # 0.3.1 or later
+stupidsim --version        # 0.3.1 or later; tap --label, wait and the optional UDID need 0.5.0 or later
 stupidsim doctor           # every private symbol it needs, resolved from the active Xcode
 bash scripts/sim_health_check.sh
 ```
@@ -26,14 +26,24 @@ Scripts find it through `$STUPIDSIM`, then `PATH`, then that path.
 ## The loop: read, act, verify
 
 ```bash
-stupidsim list --json                          # UDIDs, names, runtimes, states
-stupidsim ui-tree <udid> --labelled            # what is on screen, each with tap coordinates
-stupidsim tap <udid> --x 0.50 --y 0.46 --verify
-stupidsim ui-tree <udid> --labelled            # confirm you are where you meant to be
+export STUPIDSIM_UDID=<udid>                   # then every command can leave the UDID out
+stupidsim ui-tree --labelled                   # what is on screen, each with tap coordinates
+stupidsim tap --label General --verify         # tap by what ui-tree printed, not coordinates
+stupidsim wait --label About                   # wait for the next screen instead of sleeping
 ```
 
-- **Every device argument takes `booted`** when exactly one simulator is booted. With several booted
-  it refuses and lists them, rather than guessing. Pass the UDID then.
+- **Tap elements by name, not coordinates.** `tap --label TEXT` matches the quoted label exactly,
+  or else as a case-insensitive part of it; narrow with `--role Button` or `--id ID`, or pick with
+  `--index N` (from 1, in `ui-tree` order) when several match. It waits up to `--timeout` (5 s) for the
+  element and fails, listing the matches or what is on screen, rather than tapping a guess. Use
+  `--x/--y` or `--at x,y` only for things the tree lacks (OCR results, canvas content).
+- **`wait` instead of `sleep`.** `stupidsim wait --label TEXT [--timeout 10]` returns as soon as the
+  element is on screen and prints its line; `--gone` waits for it to leave. It exits 2 on timeout.
+  Both take `--springboard` for the home screen and system UI.
+
+- **The UDID is optional.** Without one, commands use `$STUPIDSIM_UDID`, then the only booted
+  simulator; with several booted and no `STUPIDSIM_UDID` they refuse and list them rather than
+  guessing. `booted` and `--udid <udid>` also work.
 - **Coordinates are fractions of the screen**, 0 at the top-left and 1 at the bottom-right, never
   points or pixels. `ui-tree` prints each element's centre in exactly that form (`Button "General"
   id=com.apple.settings.general @ 0.50,0.46`), already corrected for the device's rotation.
@@ -52,8 +62,9 @@ stupidsim ui-tree <udid> --labelled            # confirm you are where you meant
 |---|---|
 | Accessibility tree | `stupidsim ui-tree <udid> [--labelled] [--json]` (`--json` frames are in points) |
 | System UI, other processes | `stupidsim ui-tree <udid> --springboard` (Notification Center, lock screen, home screen), `stupidsim ui-tree <udid> --at 0.88,0.93` (whatever is on top at a point) |
-| Tap | `stupidsim tap <udid> --x X --y Y [--hold-milliseconds 120] [--verify]` |
-| Swipe / scroll | `stupidsim swipe <udid> --from-x 0.5 --from-y 0.75 --to-x 0.5 --to-y 0.3 [--verify]` |
+| Tap | `stupidsim tap <udid> --label TEXT [--role R] [--id ID] [--index N] [--verify]`, or `--at X,Y` / `--x X --y Y`; `--long` for a long press |
+| Wait | `stupidsim wait <udid> --label TEXT [--gone] [--timeout 10]` |
+| Swipe / scroll | `stupidsim swipe <udid> --from 0.5,0.75 --to 0.5,0.3 [--verify]` |
 | Pinch | `stupidsim pinch <udid> --from 0.2 --to 0.7 [--x --y --angle]` |
 | Type | `stupidsim type <udid> 'Hello@example.com #1!' [--verify]` |
 | Delete, arrows, Return, shortcuts | `stupidsim key <udid> delete [--repeat 3]`, `stupidsim key <udid> cmd+a delete`, `left`, `return`, `escape` |
@@ -64,7 +75,7 @@ stupidsim ui-tree <udid> --labelled            # confirm you are where you meant
 | Push notification | `stupidsim push <udid> payload.apns [--bundle-id ID] [--verify [--expect TEXT]]`, or `--bundle-id ID --title T --body B` (the app must be installed; silent pushes are refused) |
 | Act on a banner | `stupidsim notification <udid> show\|open\|expand\|dismiss [--match TEXT]`, `stupidsim notification <udid> reply 'text' [--match TEXT]` |
 | Pasteboard | `stupidsim paste <udid> 'text'` (reads it back, fails if overwritten), `stupidsim copy <udid>` |
-| Screenshot | `stupidsim screenshot <udid> [-o file.png]` (prints the path) |
+| Screenshot | `stupidsim screenshot <udid> [file.png]` (prints the path) |
 | Windows for people | `stupidsim view <udid>` or open the app |
 
 ## Testing push notifications
@@ -118,8 +129,8 @@ stupidsim notification <udid> open --match T               # tap it: opens the a
 
 ## What we learned the hard way
 
-- **Small fields can miss a 90 ms tap.** If a text field does not focus (Settings' and Safari's
-  bottom search bars), tap again with `--hold-milliseconds 120`. Check focus in `ui-tree`: a focused
+- **Small fields could miss a 90 ms tap** (Settings' and Safari's bottom search bars), so taps now
+  hold 120 ms. If a field still does not focus, tap again with `--hold-milliseconds 200`. Check focus in `ui-tree`: a focused
   field usually changes identifier or frame (Safari's address field goes from `TabBarItemTitle` to
   `URL`).
 - **Typing goes to whatever is focused**, as a hardware keyboard on a US layout. Capitals and the
@@ -142,7 +153,8 @@ stupidsim notification <udid> open --match T               # tap it: opens the a
   app answered". Unlock (`button home`) or launch an app (`xcrun simctl launch <udid> <bundle-id>`),
   then retry.
 - **Wait for launches to settle** before reading the screen. `simctl launch` returns before the
-  first frame; a second or two of sleep, or polling `ui-tree`, avoids reading the previous app.
+  first frame; `stupidsim wait --label <something on the first screen>` avoids reading the previous
+  app.
 - **Building with `stupid-app`** (the stupid-app-cli skill): `stupid-app run --simulator --udid
   <udid>` builds, installs and launches through `simctl` and opens no window, so it pairs with
   `stupidsim` as is, and a running stupid simulator app gives the device a window. It returns as soon
@@ -183,6 +195,7 @@ Run any with `--help`. Most take `--udid` (default: the booted simulator) and `-
 | Environment | `sim_health_check.sh` | Xcode, simctl, stupidsim and `stupidsim doctor`, Python, booted devices |
 | Discovery | `sim_list.py`, `simulator_selector.py` | Token-light device lists (`--suggest`, `--get-details`), pick or boot the best simulator |
 | Lifecycle | `simctl_boot.py`, `simctl_shutdown.py`, `simctl_create.py`, `simctl_erase.py`, `simctl_delete.py` | By UDID or name, batch with `--all` / `--type`, `--wait-ready`. Delete asks unless `--yes` |
+| Temporary simulators | `sim_temp.py` | `create --name TASK --like <UDID>` clones a warm template (seconds, not the minutes a first boot takes), boots and claims it, and prints the UDID last; `release <UDID>` deletes it; `status` shows booted devices and claims. Warns when 3 or more are booted |
 | Signed-in state | `sim_clone_state.py` | Copy an app's data container, app groups and the keychain from a busy simulator to another (created like the source unless `--target`); the source is only read. `--app` installs a simulator build first, `--launch` boots and opens it |
 | Apps | `app_launcher.py` | `--launch`, `--terminate`, `--restart`, `--install`, `--uninstall`, `--open-url`, `--list`, `--state`, launch `--args` and `--env KEY=VALUE` |
 | Device state | `appearance.py`, `status_bar.py`, `location.py` | Dark mode, Dynamic Type, locale/region; status bar presets (`--preset clean` gives 9:41); fixed coordinates, cities, GPX scenarios |
