@@ -31,7 +31,7 @@ environment `STUPIDSIM_APPS="myapp"`.
 ## Notes
 
 - A manifest is a list of the runtime's own file paths and nothing of the app's. The packs
-  built from it hold Apple's files, which is why the store is private.
+  built from it hold Apple's files, which the store serves publicly (read-only).
 - Using the app with stupidsim during the trace also records what stupidsim's in-device helper
   reads, and that belongs in the base anyway.
 - The same name can be recorded again; the newer list replaces the older one when the store is

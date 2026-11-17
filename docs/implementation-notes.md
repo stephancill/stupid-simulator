@@ -44,18 +44,27 @@ there at all. `linux/stupidsim-linux` (Python's standard library, curl, tar and 
     old path in a form `device-repath.py` cannot rewrite, and the device rebuilds them.
   - x86Sim's own `device-repath.py` moves the device's absolute paths to its new place, as x86Sim
     does for its clones, and `mksimdevice.py` rewrites `sim.env` at every boot.
-- **The store** is a private R2 bucket.
+- **The store** is an R2 bucket, readable anonymously at `https://stupidsim-store.stupidtech.net`
+  (an R2 custom domain; the bucket is not listable there), so setup needs no credentials. Reads
+  go there by default (`STUPIDSIM_PUBLIC_STORE` overrides it); a presigned map or store credentials
+  still take precedence. It was private until this change; serving Apple's runtime files publicly
+  was the maintainer's decision.
+  - Claude Code cloud sessions cannot reach that host: their proxy refuses anything off its
+    allowlist (`CONNECT tunnel failed, response 403`), and allows `*.r2.cloudflarestorage.com` and
+    GitHub. So `cloud-setup.sh` and `stupidsim-linux` probe the public address once (15 s) and
+    otherwise read R2's S3 endpoint, signed with the bucket's read-only key. That key is in the
+    code on purpose: the bucket is public anyway, and the key cannot write (verified: PUT 403).
+  - The bootstrap is fetched from GitHub
+    (`raw.githubusercontent.com/stephancill/stupid-simulator/main/linux/cloud-setup.sh`), which
+    every network here allows; a copy also sits at the store's root.
   - Under `runtimes/<runtime>/`: a skeleton (every directory and symlink, and the simruntime's own
     files outside RuntimeRoot), a pack per manifest, the manifests, and the warm parts.
   - `current.json` names the default runtime and the x86Sim version it was built with; setup
     refuses a mismatch. It is uploaded last.
-  - Requests are signed by curl's `--aws-sigv4`. `*.r2.cloudflarestorage.com` is on the cloud
-    sessions' default allowlist, so nothing needs a Worker or an allowlist change.
-  - Two R2 API tokens are scoped to the bucket: a writer for publishing and a reader for agents.
-    Anonymous and reader writes are refused.
+  - Writes (`store publish`) are signed by curl's `--aws-sigv4` with a writer R2 API token scoped
+    to the bucket. Anonymous writes are refused.
   - `store presign` makes time-limited SigV4 query links with the standard library, and
-    `STUPIDSIM_STORE_URLS` lets setup run from those alone.
-  - The store holds Apple's runtime and stays private.
+    `STUPIDSIM_STORE_URLS` lets setup run from those alone (how the store was tested while private).
 - **Setup fetches in parallel and streams.** Each object is piped from curl into `tar --zstd`, so
   no archive is held on disk. A part already present is skipped (`.stupidsim-parts`).
 - **Measured from an empty home directory** (a new user on the WSL 2 box, its download from South

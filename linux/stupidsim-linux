@@ -17,12 +17,14 @@ machines (cloud agent sessions, CI), and records what an app needs from the iOS 
     stupidsim-linux store publish
         Upload $STUPIDSIM_STORE_DIR to the store.
     stupidsim-linux store presign KEY [--hours N]
-        A time-limited GET URL for one object, for trying setup without store credentials.
+        A time-limited signed GET URL for one object (rarely needed now that reads are public).
 
-The store is an S3-compatible bucket (a private Cloudflare R2 bucket): $STUPIDSIM_STORE_URL is the
-bucket's endpoint URL (https://<account>.r2.cloudflarestorage.com/<bucket>), with
-$STUPIDSIM_STORE_KEY_ID and $STUPIDSIM_STORE_SECRET. Requests are signed by curl (--aws-sigv4).
-It holds Apple's simulator runtime, so it must stay private. Layout, per runtime build:
+The store is a Cloudflare R2 bucket. Setup reads it anonymously from its public address,
+https://stupidsim-store.stupidtech.net ($STUPIDSIM_PUBLIC_STORE overrides it), so it needs no
+credentials. Publishing writes through the bucket's S3 endpoint, $STUPIDSIM_STORE_URL
+(https://<account>.r2.cloudflarestorage.com/<bucket>), with $STUPIDSIM_STORE_KEY_ID and
+$STUPIDSIM_STORE_SECRET; curl signs those requests (--aws-sigv4). When the key is set, reads are
+signed too. Layout, per runtime build:
 
     runtimes/<runtime>/skeleton.tar.zst      every directory and symlink, and the files outside
                                              RuntimeRoot (the simruntime's own plists)
@@ -38,6 +40,7 @@ Only Python's standard library, curl, tar and zstd are used. Verified with x86Si
 """
 import argparse
 import concurrent.futures
+import functools
 import hashlib
 import json
 import os
@@ -52,6 +55,13 @@ X86SIM_VERSION = "0.3.0"
 X86SIM_SHA256 = "d697b6e73678c1dbfce8dabbd71fd5a7ef59b110675f9e3ac3cacd42af2e59c8"
 X86SIM_URL = f"https://github.com/x86sim/x86sim/releases/download/v{X86SIM_VERSION}/x86sim-{X86SIM_VERSION}-x86_64.AppImage"
 DEFAULT_DEVICE = "agent"
+# The store's public read-only address (the bucket behind it is served anonymously, without listing)
+PUBLIC_STORE = "https://stupidsim-store.stupidtech.net"
+# A read-only key for the store's R2 bucket, for networks that block PUBLIC_STORE (see public_store). It is
+# public on purpose: the bucket is publicly readable anyway, and the key cannot write.
+READ_ENDPOINT = "https://2e6717908caccc8ef5eebae01beea4aa.r2.cloudflarestorage.com/stupidsim-runtimes"
+READ_KEY_ID = "71491aa6318f16f4ae12eb220ed03ca4"
+READ_SECRET = "690014e1c18add82944fae4abc6da4601dd819342007bb0eb4fb5e37e5f7dc57"
 DEFAULT_MODEL = "iPhone 17 Pro"
 # Inside a runtime's extracted/ directory, where the simulator's file system starts.
 RUNTIME_ROOT_PREFIX = "Library/Developer/CoreSimulator/Profiles/Runtimes/"
@@ -330,23 +340,47 @@ def curl_store(key, extra, signed=True):
     return command + extra + [f"{url}/{urllib.parse.quote(key)}"]
 
 
-def store_get(key):
-    return subprocess.run(curl_store(key, []), check=True, stdout=subprocess.PIPE).stdout
+CURL_GET = ["curl", "-fsS", "--retry", "3", "--retry-all-errors"]
 
 
-def object_url(key):
-    """A presigned URL in $STUPIDSIM_STORE_URLS (a JSON map of key to URL) wins over signing, so
-    setup can be tried with time-limited links and no credentials."""
+@functools.cache
+def public_store():
+    """The public address, or None when this network cannot reach it. Claude Code cloud sessions
+    sit behind a proxy that refuses hosts outside its allowlist (CONNECT 403) but allows R2's S3
+    endpoint, so reads then go there, signed with the store's read-only key (READ_KEY_ID)."""
+    base = (os.environ.get("STUPIDSIM_PUBLIC_STORE") or PUBLIC_STORE).rstrip("/")
+    probe = subprocess.run(["curl", "-fsS", "--max-time", "15", "-o", "/dev/null", f"{base}/current.json"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if probe.returncode == 0:
+        return base
+    log(f"{base} is not reachable from here; reading the store through R2's S3 endpoint instead")
+    return None
+
+
+def read_command(key):
+    """curl arguments that print one store object. In order: a presigned URL in
+    $STUPIDSIM_STORE_URLS (a JSON map of key to URL); signed with $STUPIDSIM_STORE_KEY_ID when set;
+    the public address; signed with the embedded read-only key."""
     links = json.loads(os.environ.get("STUPIDSIM_STORE_URLS") or "{}")
-    return links.get(key)
+    if key in links:
+        return CURL_GET + [links[key]]
+    if os.environ.get("STUPIDSIM_STORE_KEY_ID"):
+        return curl_store(key, [])
+    base = public_store()
+    if base:
+        return CURL_GET + [f"{base}/{urllib.parse.quote(key)}"]
+    return CURL_GET + ["--aws-sigv4", "aws:amz:auto:s3", "--user", f"{READ_KEY_ID}:{READ_SECRET}",
+                       f"{READ_ENDPOINT}/{urllib.parse.quote(key)}"]
+
+
+def store_get(key):
+    return subprocess.run(read_command(key), check=True, stdout=subprocess.PIPE).stdout
 
 
 def fetch_and_extract(key, destination):
     """Streams a .tar.zst from the store into a directory, never holding the archive on disk."""
     os.makedirs(destination, exist_ok=True)
-    link = object_url(key)
-    download = ["curl", "-fsS", "--retry", "3", "--retry-all-errors", link] if link else curl_store(key, [])
-    curl = subprocess.Popen(download, stdout=subprocess.PIPE)
+    curl = subprocess.Popen(read_command(key), stdout=subprocess.PIPE)
     # --no-same-owner: as root, tar keeps the archive's owner (the uid that built the store). x86Sim's processes then
     # cannot create the translation cache's lock and shared image (.map) files, so every process loads its own private
     # copy of the AOT image (about 1.2 GB each) and a 16 GB machine runs out of memory within seconds of booting.
@@ -366,9 +400,6 @@ def check_owned(directory):
 
 
 def current():
-    link = object_url("current.json")
-    if link:
-        return json.loads(subprocess.run(["curl", "-fsS", link], check=True, stdout=subprocess.PIPE).stdout)
     return json.loads(store_get("current.json"))
 
 
@@ -581,9 +612,6 @@ def runtime_root_unchecked(rdir):
 
 
 def object_text(key):
-    link = object_url(key)
-    if link:
-        return subprocess.run(["curl", "-fsS", link], check=True, stdout=subprocess.PIPE).stdout.decode()
     return store_get(key).decode()
 
 

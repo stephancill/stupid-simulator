@@ -36,14 +36,41 @@ there reports x86Sim, the in-device helper and each device's frames. Differences
   instant.
 - `notification expand` and `reply` are refused; a payload with `"mutable-content": 1` needs
   `--skip-service-extension`. `view` opens x86Sim's own window.
-- On a throwaway machine (a cloud agent session, CI) the environment's setup has normally run
-  `linux/cloud-setup.sh`; start the device with `stupidsim-linux boot` (seconds to a few minutes)
-  and install the app under test with x86Sim's `install`. Only the runtime files the base and the
-  listed apps need are there: an app that never shows its UI after launching may need a part that
-  was not recorded (docs/runbooks/app-manifest.md).
 - The `scripts/` here wrap `xcrun simctl` and do not run on Linux. x86Sim's own command line
   (`~/.local/share/stupidsim/x86sim/AppRun x86sim launch|install|openurl|location|privacy ...`,
   with `X86SIM_DEVICE` set to the device's directory) follows simctl's.
+
+### A throwaway Linux machine (Claude Code cloud session, CI)
+
+No Mac, Xcode or credentials needed: a public store holds just the runtime files tests read, a warm
+translation cache and a device that has booted once. Verified in a Claude Code cloud session
+(4 vCPU, 16 GB): setup 90 s, boot 105 s, an app on screen 18 s after launch, 4.2 GB in use.
+
+```bash
+# once (ideally in the environment's setup script, so its snapshot keeps it); as root or a user
+curl -fsSL https://raw.githubusercontent.com/stephancill/stupid-simulator/main/linux/cloud-setup.sh | STUPIDSIM_APPS="stupidsocial" bash
+# each session: boot and wait for the home screen (about 2 minutes; run it in the background and
+# poll for its "booted in" line, since tool calls may time out)
+stupidsim-linux boot
+export X86SIM_DEVICE=$(ls -d ~/.local/share/x86sim/var/device-a64-agent)
+A=~/.local/share/stupidsim/x86sim/AppRun
+$A x86sim install path/to/MyApp.app      # an arm64 iOS simulator build
+$A x86sim launch com.example.myapp
+stupidsim ui-tree booted --labelled      # then the usual loop
+```
+
+- `STUPIDSIM_APPS` names the apps whose runtime files to fetch besides the base. **An app with no
+  manifest in the store installs fine but never comes to the front, with no crash report.** If
+  Settings opens and your app does not, that is the cause: record one
+  (docs/runbooks/app-manifest.md in the repository). For a quick check that the device works, open
+  Settings: `$A x86sim launch com.apple.Preferences`.
+- `stupidsim wait --label "<app name>"` also matches the home screen icon of that name; wait for
+  something inside the app instead.
+- The first launch of an app is slower (its code is translated as it runs); later launches are
+  faster.
+- If setup or boot fails, its message names the fix (a translation cache owned by another user, a
+  missing `/run/user/<uid>`). Do not work around it by booting with less memory: a boot that runs
+  out of memory on 16 GB means the shared translation image could not be written.
 
 ## The loop: read, act, verify
 

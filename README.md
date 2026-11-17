@@ -82,8 +82,9 @@ another extracted copy of x86Sim (its `AppRun`).
 #### Throwaway machines: cloud agent sessions and CI
 
 Fetching and unpacking an iOS runtime from Apple, then booting a new device, takes about 20
-minutes and 36 GB. `stupidsim-linux setup` does it in a few minutes instead, from a private runtime
-store you fill once (an R2 bucket):
+minutes and 36 GB. `stupidsim-linux setup` does it in about three minutes instead (setup 90 s,
+first boot 105 s in a Claude Code cloud session), from a runtime store served read-only at
+`https://stupidsim-store.stupidtech.net`:
 
 - **Only the runtime files tests read.** The base every session needs is 6,158 of the runtime's
   588,000 files, 1.8 GB compressed, and a typical app adds little (StupidSocial: 0.14 GB).
@@ -94,18 +95,23 @@ The parts are recorded by tracing on a machine with the whole runtime
 ([docs/runbooks/app-manifest.md](docs/runbooks/app-manifest.md)), and each new iOS version is added
 with [docs/runbooks/new-ios-version.md](docs/runbooks/new-ios-version.md).
 
-For a Claude Code cloud environment:
+For a Claude Code cloud environment (or any x86-64 Ubuntu machine, as root or a normal user), no
+credentials are needed:
 
-- Set `STUPIDSIM_STORE_URL`, `STUPIDSIM_STORE_KEY_ID` and `STUPIDSIM_STORE_SECRET` (a read-only R2
-  token) and `STUPIDSIM_APPS` as its environment variables.
-- Its setup script runs [`linux/cloud-setup.sh`](linux/cloud-setup.sh).
-- Each session starts with `stupidsim-linux boot`.
+```sh
+curl -fsSL https://raw.githubusercontent.com/stephancill/stupid-simulator/main/linux/cloud-setup.sh | STUPIDSIM_APPS="stupidsocial" bash
+stupidsim-linux boot     # at the start of each session; waits for the home screen
+```
 
-The store holds Apple's runtime, so it must stay private.
+Put the first line in the environment's setup script, so its snapshot keeps the result, and the
+second at the start of each session. `STUPIDSIM_APPS` names the apps whose runtime files to fetch
+besides the base: an app without a manifest in the store installs, but never comes to the front.
+A store of your own works too: point `STUPIDSIM_PUBLIC_STORE` at it, or use the signed variables
+described in [`linux/stupidsim-linux`](linux/stupidsim-linux).
 
 x86Sim is a separate GPL-3.0 project by other people; `stupidsim` only runs it. Apple's licence for
-its simulator runtimes is written for Apple-branded computers: x86Sim downloads them on your machine
-rather than redistributing them, but whether to run them elsewhere is yours to decide.
+its simulator runtimes is written for Apple-branded computers, and the store serves files from
+Apple's runtime: whether to use them elsewhere is yours to decide.
 
 ## For agents
 

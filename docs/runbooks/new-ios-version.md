@@ -17,8 +17,8 @@ traces, and the upload.
 - **A Mac with Xcode and the same iOS version**, to compare the in-device helper's tree with the
   Mac's, which is the reference.
 - **The store's writer credentials** (`STUPIDSIM_STORE_URL`, `STUPIDSIM_STORE_KEY_ID`,
-  `STUPIDSIM_STORE_SECRET`). They are an R2 API token scoped to the store bucket.
-  Agents only ever get the reader token.
+  `STUPIDSIM_STORE_SECRET`). They are an R2 API token scoped to the store bucket. Agents need no
+  credentials: they read the store's public address.
 - The app builds whose manifests should be re-recorded (arm64 iOS simulator builds).
 
 ## 1. Check that x86Sim supports it
@@ -143,19 +143,22 @@ everything is in place. To make the new runtime available without making it the 
 Rolling back means re-uploading the previous `current.json`. The previous runtime's files stay
 under their own `runtimes/<runtime>/` prefix until removed.
 
+Two more objects live at the store's root, outside `store build`, and are uploaded with curl
+(`--aws-sigv4 "aws:amz:auto:s3"` and the writer credentials) whenever they change:
+`cloud-setup.sh` (from `linux/`) and `packages/stupidsim-linux-x86_64.tar.gz` (the release's Linux
+tarball from `scripts/build-linux.sh`, which is what `cloud-setup.sh` installs).
+
 ## 7. Check setup from nothing
 
 On a machine, or as a user, with no x86Sim data:
 
 ```sh
-STUPIDSIM_STORE_URL=... STUPIDSIM_STORE_KEY_ID=<reader> STUPIDSIM_STORE_SECRET=<reader> \
-  STUPIDSIM_APPS="<app>" bash linux/cloud-setup.sh
+STUPIDSIM_APPS="<app>" bash linux/cloud-setup.sh
 stupidsim-linux boot
 stupidsim ui-tree booted --springboard --labelled
 ```
 
-Then once in a real cloud session: a one-off cloud routine with the reader credentials in the
-environment, running the same commands and reporting how long each step took. The setup has to
+Then once in a real cloud session: a one-off cloud routine running the same commands and reporting how long each step took. The setup has to
 finish in about five minutes for Claude Code's setup cache to keep it. If it doesn't, the base
 pack has grown and the trace should be looked at.
 

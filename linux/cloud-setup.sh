@@ -5,31 +5,41 @@
 # device. It does not boot the device: boot it when the session starts, since a machine snapshot
 # (Claude Code's setup cache) keeps files but not running processes.
 #
-#   STUPIDSIM_STORE_URL=... STUPIDSIM_STORE_KEY_ID=... STUPIDSIM_STORE_SECRET=... \
-#   STUPIDSIM_APPS="stupidsocial" bash cloud-setup.sh
+#   curl -fsSL https://raw.githubusercontent.com/stephancill/stupid-simulator/main/linux/cloud-setup.sh \
+#     | STUPIDSIM_APPS="stupidsocial" bash
 #
 # Then, at the start of each session:   stupidsim-linux boot
 #
-# STUPIDSIM_APPS names the app manifests to fetch besides the base (space separated); see
+# STUPIDSIM_APPS names the app manifests to fetch besides the base (space separated); an app the
+# store has no manifest for installs but never comes to the front. See
 # docs/runbooks/app-manifest.md for recording one. Prints the time each step took.
+#
+# The store is read anonymously from STUPIDSIM_PUBLIC_STORE (default below), or through R2's S3
+# endpoint where that host is blocked. STUPIDSIM_STORE_URLS
+# (a JSON map of key to presigned link) or the signed variables STUPIDSIM_STORE_URL,
+# STUPIDSIM_STORE_KEY_ID and STUPIDSIM_STORE_SECRET still work instead.
 set -euo pipefail
-
-# Instead of the three store variables, STUPIDSIM_STORE_URLS can map each object's key to a
-# time-limited link (`stupidsim-linux store presign`), for trying setup without credentials.
-if [ -z "${STUPIDSIM_STORE_URLS:-}" ]; then
-  : "${STUPIDSIM_STORE_URL:?the S3 endpoint of the store bucket, https://<account>.r2.cloudflarestorage.com/<bucket>}"
-  : "${STUPIDSIM_STORE_KEY_ID:?a read-only access key id for the store}"
-  : "${STUPIDSIM_STORE_SECRET:?the secret of that key}"
-fi
 started=$(date +%s)
+public="${STUPIDSIM_PUBLIC_STORE:-https://stupidsim-store.stupidtech.net}"
+# Networks that block that host (Claude Code cloud sessions refuse it with a CONNECT 403) still allow
+# R2's S3 endpoint: read there with the store's read-only key, public on purpose, since the bucket is
+# publicly readable anyway and the key cannot write. stupidsim-linux carries the same key.
+read_endpoint="https://2e6717908caccc8ef5eebae01beea4aa.r2.cloudflarestorage.com/stupidsim-runtimes"
+read_key="71491aa6318f16f4ae12eb220ed03ca4:690014e1c18add82944fae4abc6da4601dd819342007bb0eb4fb5e37e5f7dc57"
+if curl -fsS --max-time 15 -o /dev/null "${public}/current.json" 2>/dev/null; then reach=public; else reach=signed; fi
 
 if [ "$(id -u)" = 0 ]; then prefix=/usr/local; else prefix="${HOME}/.local"; fi
 get() {
   if [ -n "${STUPIDSIM_STORE_URLS:-}" ]; then
     curl -fsS --retry 3 --retry-all-errors "$(python3 -c 'import json,os,sys; print(json.loads(os.environ["STUPIDSIM_STORE_URLS"])[sys.argv[1]])' "$1")"
-  else
+  elif [ -n "${STUPIDSIM_STORE_KEY_ID:-}" ]; then
     curl -fsS --retry 3 --retry-all-errors --aws-sigv4 "aws:amz:auto:s3" \
-      --user "${STUPIDSIM_STORE_KEY_ID}:${STUPIDSIM_STORE_SECRET}" "${STUPIDSIM_STORE_URL}/$1"
+      --user "${STUPIDSIM_STORE_KEY_ID}:${STUPIDSIM_STORE_SECRET:?the secret of STUPIDSIM_STORE_KEY_ID}" \
+      "${STUPIDSIM_STORE_URL:?the S3 endpoint of the store bucket}/$1"
+  elif [ "${reach}" = public ]; then
+    curl -fsS --retry 3 --retry-all-errors "${public}/$1"
+  else
+    curl -fsS --retry 3 --retry-all-errors --aws-sigv4 "aws:amz:auto:s3" --user "${read_key}" "${read_endpoint}/$1"
   fi
 }
 
