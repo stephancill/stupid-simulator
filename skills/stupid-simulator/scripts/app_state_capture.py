@@ -20,6 +20,7 @@ from common import (
     count_elements,
     get_accessibility_tree,
     resolve_udid,
+    stupidsim_path,
 )
 from common.env_config import env_int
 
@@ -52,14 +53,9 @@ class AppStateCapture:
 
     def capture_screenshot(self, output_path: Path) -> bool:
         """Capture screenshot of current screen."""
-        cmd = ["xcrun", "simctl", "io"]
-
-        if self.udid:
-            cmd.append(self.udid)
-        else:
-            cmd.append("booted")
-
-        cmd.extend(["screenshot", str(output_path)])
+        # stupidsim reads the framebuffer; `simctl io screenshot` makes the guest hide the
+        # Dynamic Island while it captures, which blinks it in any window or recording.
+        cmd = [stupidsim_path(), "screenshot", self.udid or "booted", str(output_path)]
 
         try:
             subprocess.run(cmd, capture_output=True, check=True)

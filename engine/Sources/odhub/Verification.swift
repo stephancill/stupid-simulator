@@ -18,6 +18,12 @@ struct Verification: ParsableArguments {
     /// Frames taken before the input, spread over about a second so a blinking cursor is caught
     /// both on and off.
     private static let baselineFrames = 3
+    /// The least time between baseline frames. simctl took about this long for a screenshot, which
+    /// is what spread the frames out; the framebuffer answers in milliseconds, and three frames
+    /// read back to back would miss a blinking cursor or an animation.
+    private static let baselineSpacing: Duration = .milliseconds(400)
+    /// Between frames after the input, so a host that reads frames instantly is not polled flat out.
+    private static let pollSpacing: Duration = .milliseconds(50)
 
     func validate() throws {
         guard verifyTimeout > 0 else {
@@ -30,10 +36,18 @@ struct Verification: ParsableArguments {
             try await input()
             return
         }
-        let simctl = SimctlService()
+        // The framebuffer, not `simctl io screenshot`, which hides the Dynamic Island while it
+        // captures; see `FramebufferCapture`.
+        let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
+        let frame = { try ScreenFrame(image: FramebufferCapture.image(adapter: adapter, udid: udid)) }
         var baseline: [ScreenFrame] = []
-        for _ in 0..<Self.baselineFrames {
-            baseline.append(try ScreenFrame(png: simctl.screenshot(udid: udid)))
+        let clock = ContinuousClock()
+        for index in 0..<Self.baselineFrames {
+            let started = clock.now
+            baseline.append(try frame())
+            if index < Self.baselineFrames - 1 {
+                try await Task.sleep(until: started + Self.baselineSpacing, clock: clock)
+            }
         }
         guard let noise = ScreenChange.noise(in: baseline), let before = baseline.last else {
             FileHandle.standardError.write(Data("could not verify: the screen turned while it was being watched\n".utf8))
@@ -51,13 +65,14 @@ struct Verification: ParsableArguments {
 
         let deadline = Date().addingTimeInterval(verifyTimeout)
         repeat {
-            let after = try ScreenFrame(png: simctl.screenshot(udid: udid))
+            let after = try frame()
             let change = ScreenChange.difference(from: before, to: after, ignoring: noise)
             if change.isChange {
                 let box = change.bounds
                 print("verified: \(change.pixels) pixels changed in \(Int(box.width))x\(Int(box.height)) at \(Int(box.minX)),\(Int(box.minY))")
                 return
             }
+            try await Task.sleep(for: Self.pollSpacing)
         } while Date() < deadline
         FileHandle.standardError.write(Data("""
             the screen did not change within \(verifyTimeout) s, so the device may not have acted on the \

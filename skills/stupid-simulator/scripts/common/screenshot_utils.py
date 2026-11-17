@@ -238,7 +238,11 @@ def capture_screenshot(
     try:
         # Capture raw screenshot to temp file
         temp_path = "/tmp/ios_simulator_screenshot.png"
-        cmd = ["xcrun", "simctl", "io", udid, "screenshot", temp_path]
+        # stupidsim reads the framebuffer; `simctl io screenshot` makes the guest hide the
+        # Dynamic Island while it captures, which blinks it in any window or recording.
+        from .tree_utils import stupidsim_path
+
+        cmd = [stupidsim_path(), "screenshot", udid, temp_path]
 
         subprocess.run(cmd, capture_output=True, text=True, check=True)
 

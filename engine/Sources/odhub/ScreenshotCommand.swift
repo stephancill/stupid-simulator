@@ -23,7 +23,10 @@ struct Screenshot: ParsableCommand {
 
     func run() throws {
         let file = URL(fileURLWithPath: path ?? output ?? defaultName()).standardizedFileURL
-        try SimctlService().screenshot(udid: udid, to: file)
+        // The framebuffer, not `simctl io screenshot`, which hides the Dynamic Island while it
+        // captures; see `FramebufferCapture`.
+        let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
+        try FramebufferCapture.png(adapter: adapter, udid: udid).write(to: file)
         print(file.path)
     }
 

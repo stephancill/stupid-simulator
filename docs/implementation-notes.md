@@ -346,9 +346,17 @@ Releases are cut locally; the full procedure is in [RELEASING.md](../RELEASING.m
 
 - Every command that takes a UDID also takes `booted`, meaning the one booted simulator. With none
   or several booted it refuses and names them, rather than picking one.
-- `screenshot <udid> [-o file]` writes the main display as a PNG through `simctl io screenshot` and
-  prints the absolute path. (`simctl` writes a file literally named `-` when given `-`, so it cannot
-  write to standard output.)
+- `screenshot <udid> [-o file]` writes the main display as a PNG and prints the absolute path. It
+  reads the main display's unmasked framebuffer surface through a short lived display session
+  (`FramebufferCapture`), as do `--verify`'s frames. It used `simctl io screenshot` until the guest
+  was found to take the Dynamic Island out of its framebuffer for 200 to 500 ms on every `simctl`
+  screenshot, so an agent taking screenshots or verifying input made the island blink in the
+  viewer window and in its recordings. Measured on Xcode 27 (27A266a), iOS 27.0, iPhone 17 Pro with
+  Settings in front: three `simctl` screenshots blanked the island three times, three framebuffer
+  reads none. Because nothing hides it any more, screenshots now show the island as the black pill
+  the screen shows; the corners stay square, as `simctl` saved them. The skill's screenshot helpers
+  (`sim_ocr.sh`, `screenshot_utils.py`, `app_state_capture.py`, `test_recorder.py`) and
+  `scripts/verify-tap.sh` call `stupidsim screenshot` for the same reason.
 - `list --json` prints the devices as JSON.
 - `--verify` on `tap`, `swipe`, `pinch`, `type`, `button`, `rotate`, `home-swipe` and
   `app-switcher`: CoreSimulator accepts an input message whether or not the guest acts on it, so

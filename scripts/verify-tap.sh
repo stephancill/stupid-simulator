@@ -71,7 +71,7 @@ after="$(running_apps | grep -c "^${bundle_id}$" || true)"
 
 screenshot="${repo_root}/build/verify-tap.png"
 mkdir -p "$(dirname "${screenshot}")"
-xcrun simctl io "${udid}" screenshot "${screenshot}" >/dev/null 2>&1 || true
+"${binary}" screenshot "${udid}" "${screenshot}" >/dev/null 2>&1 || true
 
 if [ "${after}" -gt 0 ]; then
   echo "PASS: the tap launched ${bundle_id}."

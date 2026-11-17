@@ -61,7 +61,10 @@ fi
 
 STABLE="${TMPDIR:-/tmp}/stupid-simulator-ocr-screen-${UDID}.png"
 TMP="$(mktemp -d)/screen.png"
-xcrun simctl io "$UDID" screenshot "$TMP" >/dev/null 2>&1
+# stupidsim reads the framebuffer; `simctl io screenshot` makes the guest hide the Dynamic Island
+# while it captures, which blinks it in any window or recording.
+STUPIDSIM="${STUPIDSIM:-$(command -v stupidsim || echo "/Applications/stupid simulator.app/Contents/MacOS/stupidsim")}"
+"$STUPIDSIM" screenshot "$UDID" "$TMP" >/dev/null
 cp "$TMP" "$STABLE"
 [ -n "$OUT" ] && cp "$TMP" "$OUT"
 

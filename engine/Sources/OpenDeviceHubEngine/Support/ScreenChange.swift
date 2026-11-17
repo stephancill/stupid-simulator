@@ -21,6 +21,11 @@ public struct ScreenFrame: Sendable, Equatable {
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
             throw EngineError.capabilityUnavailable(name: "decoding the screenshot")
         }
+        try self.init(image: image)
+    }
+
+    /// Redraws any image into the one pixel layout frames are compared in.
+    public init(image: CGImage) throws {
         let width = image.width
         let height = image.height
         var pixels = [UInt32](repeating: 0, count: width * height)

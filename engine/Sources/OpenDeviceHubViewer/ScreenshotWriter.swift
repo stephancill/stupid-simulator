@@ -2,40 +2,13 @@ import AppKit
 import CoreGraphics
 import Foundation
 import IOSurface
+import OpenDeviceHubEngine
 
 /// Turns a framebuffer surface into a PNG. Whether the bezel is included follows whichever surface
 /// the session is currently delivering, so the picture matches what the window shows.
 public enum ScreenshotWriter {
     public static func image(from surface: IOSurfaceRef) -> CGImage? {
-        IOSurfaceLock(surface, .readOnly, nil)
-        defer { IOSurfaceUnlock(surface, .readOnly, nil) }
-
-        let width = IOSurfaceGetWidth(surface)
-        let height = IOSurfaceGetHeight(surface)
-        let bytesPerRow = IOSurfaceGetBytesPerRow(surface)
-        guard width > 0, height > 0, bytesPerRow > 0 else { return nil }
-
-        // Copied rather than wrapped, because the surface keeps being drawn into and a lazily read
-        // provider would show a later frame or tear.
-        let data = Data(bytes: IOSurfaceGetBaseAddress(surface), count: bytesPerRow * height)
-        guard let provider = CGDataProvider(data: data as CFData) else { return nil }
-
-        return CGImage(
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bitsPerPixel: 32,
-            bytesPerRow: bytesPerRow,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGBitmapInfo(
-                rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue
-                    | CGBitmapInfo.byteOrder32Little.rawValue
-            ),
-            provider: provider,
-            decode: nil,
-            shouldInterpolate: false,
-            intent: .defaultIntent
-        )
+        FramebufferCapture.image(from: surface)
     }
 
     /// The screen drawn inside the device's body, which is what the window shows and therefore what
