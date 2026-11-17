@@ -3,6 +3,20 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## Unreleased
+
+- The Dynamic Island no longer blinks in the viewer window and in recordings while an agent takes
+  screenshots or verifies input. `stupidsim screenshot` and `--verify` used `simctl io screenshot`,
+  which makes the device hide the island while it captures. They now read the screen directly, so
+  screenshots show the island as it appears on screen. The agent skill's OCR and screenshot scripts
+  go through `stupidsim screenshot` too.
+- The agent skill's `sim_temp.py status` shows how much memory each booted simulator uses, and
+  `sim_temp.py reap` deletes temporary simulators whose agent has exited. New temporary simulators
+  stop the wallpaper extensions they are not showing, about 250 MB each, and shutdowns take turns, so
+  several simulators running at once slow each other down less.
+- The agent skill's `biometrics.py` tries again when the device ignores a Face ID or Touch ID
+  enrollment, and fails if it still does not take.
+
 ## 0.5.0
 
 - `stupidsim tap --label Save` taps an element by what `ui-tree` prints, instead of coordinates
