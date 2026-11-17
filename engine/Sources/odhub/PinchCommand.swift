@@ -44,8 +44,8 @@ struct Pinch: AsyncParsableCommand {
     }
 
     private func send() async throws {
-        let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
-        let session = try adapter.openInput(udid)
+        let host = try SimulatorHosts.current()
+        let session = try host.openInput(udid)
         defer { session.close() }
 
         let centre = CGPoint(x: x, y: y)

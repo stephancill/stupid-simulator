@@ -19,8 +19,9 @@ struct Verification: ParsableArguments {
     /// both on and off.
     private static let baselineFrames = 3
     /// The least time between baseline frames. simctl took about this long for a screenshot, which
-    /// is what spread the frames out; the framebuffer answers in milliseconds, and three frames
-    /// read back to back would miss a blinking cursor or an animation.
+    /// is what spread the frames out; the framebuffer and x86Sim's frame ring answer in
+    /// milliseconds, and three frames read back to back missed a story ring's animation, so
+    /// `--verify` passed on input that had done nothing (x86Sim 0.3.0).
     private static let baselineSpacing: Duration = .milliseconds(400)
     /// Between frames after the input, so a host that reads frames instantly is not polled flat out.
     private static let pollSpacing: Duration = .milliseconds(50)
@@ -36,15 +37,12 @@ struct Verification: ParsableArguments {
             try await input()
             return
         }
-        // The framebuffer, not `simctl io screenshot`, which hides the Dynamic Island while it
-        // captures; see `FramebufferCapture`.
-        let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
-        let frame = { try ScreenFrame(image: FramebufferCapture.image(adapter: adapter, udid: udid)) }
+        let host = try SimulatorHosts.current()
         var baseline: [ScreenFrame] = []
         let clock = ContinuousClock()
         for index in 0..<Self.baselineFrames {
             let started = clock.now
-            baseline.append(try frame())
+            baseline.append(try host.screenFrame(udid))
             if index < Self.baselineFrames - 1 {
                 try await Task.sleep(until: started + Self.baselineSpacing, clock: clock)
             }
@@ -61,11 +59,11 @@ struct Verification: ParsableArguments {
 
         try await input()
         // The command's own line comes before the verdict, even when stdout is a pipe.
-        fflush(stdout)
+        fflush(nil)
 
         let deadline = Date().addingTimeInterval(verifyTimeout)
         repeat {
-            let after = try frame()
+            let after = try host.screenFrame(udid)
             let change = ScreenChange.difference(from: before, to: after, ignoring: noise)
             if change.isChange {
                 let box = change.bounds

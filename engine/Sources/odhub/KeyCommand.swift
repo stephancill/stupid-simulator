@@ -45,8 +45,8 @@ struct Key: AsyncParsableCommand {
     }
 
     private func press(_ chords: [KeyboardMap.KeyChord]) async throws {
-        let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
-        let session = try adapter.openInput(udid)
+        let host = try SimulatorHosts.current()
+        let session = try host.openInput(udid)
         defer { session.close() }
 
         for chord in chords {

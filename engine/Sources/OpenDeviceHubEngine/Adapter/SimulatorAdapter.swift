@@ -1,6 +1,8 @@
 import CoreGraphics
 import Foundation
+#if os(macOS)
 import IOSurface
+#endif
 
 public enum DeviceState: String, Sendable, Codable {
     case shutdown
@@ -38,6 +40,7 @@ public struct DeviceInfo: Sendable, Hashable, Codable {
     }
 }
 
+#if os(macOS)
 extension DisplaySession {
     public var screenChanges: AsyncStream<ScreenProperties> { AsyncStream { $0.finish() } }
 }
@@ -51,6 +54,7 @@ public struct DisplayFrame: @unchecked Sendable {
         self.timestamp = timestamp
     }
 }
+#endif
 
 public struct TouchEvent: Sendable, Hashable {
     public enum Phase: Sendable, Hashable {
@@ -117,6 +121,7 @@ public enum ButtonPhase: Sendable, Hashable {
     case up
 }
 
+#if os(macOS)
 /// What a screen announces about itself when something about it changes.
 public struct ScreenProperties: Sendable, Hashable {
     public let uniqueID: String?
@@ -143,6 +148,8 @@ public protocol DisplaySession: AnyObject, Sendable {
     func close()
 }
 
+#endif
+
 public protocol InputSession: AnyObject, Sendable {
     func touch(_ event: TouchEvent) async throws
     func key(_ event: KeyEvent) async throws
@@ -150,6 +157,7 @@ public protocol InputSession: AnyObject, Sendable {
     func close()
 }
 
+#if os(macOS)
 /// A live connection that keeps a device's clipboard and the Mac's in step.
 ///
 /// Held for as long as the device is on screen: the automatic syncing runs on the connection, so
@@ -224,6 +232,7 @@ public protocol SimulatorAdapter: Sendable {
     /// without asking.
     func watchDeviceStates() throws -> any DeviceNotifier
 }
+#endif
 
 extension DeviceState {
     /// The numeric values were observed on Xcode 26.5 (17F42) by polling a real boot and shutdown
@@ -250,6 +259,7 @@ extension DeviceState {
     }
 }
 
+#if os(macOS)
 extension SimulatorAdapter {
     public func openCoreDevice(_ udid: String, service: String) throws -> CoreDeviceFeature {
         throw EngineError.capabilityUnavailable(name: "CoreDevice \(service) on \(udid)")
@@ -297,3 +307,4 @@ extension SimulatorAdapter {
         return try Touchscreen.parse(try await feature.exchange(Touchscreen.request(), describedAs: "connectedServices"))
     }
 }
+#endif

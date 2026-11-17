@@ -22,12 +22,12 @@ struct Paste: ParsableCommand {
             let data = FileHandle.standardInput.readDataToEndOfFile()
             value = String(decoding: data, as: UTF8.self)
         }
-        let simctl = SimctlService()
-        try simctl.pasteboardCopy(value, udid: udid)
+        let host = try SimulatorHosts.current()
+        try host.setPasteboard(value, udid: udid)
         // Device Hub, and any viewer that keeps the pasteboards in step, writes the Mac's clipboard
         // over the device's straight away, so what was placed is read back rather than assumed.
         Thread.sleep(forTimeInterval: 0.25)
-        guard try simctl.pasteboardPaste(udid: udid) == value else {
+        guard try host.pasteboard(udid) == value else {
             throw PasteboardOverwritten()
         }
         print("copied \(value.count) characters to the device pasteboard")
@@ -53,6 +53,6 @@ struct Copy: ParsableCommand {
     var udid: String
 
     func run() throws {
-        print(try SimctlService().pasteboardPaste(udid: udid), terminator: "")
+        print(try SimulatorHosts.current().pasteboard(udid), terminator: "")
     }
 }

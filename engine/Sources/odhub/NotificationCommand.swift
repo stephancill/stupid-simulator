@@ -54,8 +54,8 @@ struct NotificationCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
-        let banner = try await BannerWatch.wait(adapter: adapter, udid: udid, matching: match, timeout: timeout)
+        let host = try SimulatorHosts.current()
+        let banner = try await BannerWatch.wait(host: host, udid: udid, matching: match, timeout: timeout)
 
         switch action {
         case .show:
@@ -68,30 +68,30 @@ struct NotificationCommand: AsyncParsableCommand {
             }
             return
         case .open:
-            try await tap(banner, adapter: adapter)
+            try await tap(banner, host: host)
         case .expand:
-            try adapter.performBannerAction(.more, udid: udid)
+            try host.performBannerAction(.more, udid: udid)
         case .dismiss:
-            try adapter.performBannerAction(.dismiss, udid: udid)
+            try host.performBannerAction(.dismiss, udid: udid)
         case .reply:
-            try adapter.performBannerAction(.more, udid: udid)
-            try await ReplyBar.send(text ?? "", adapter: adapter, udid: udid)
+            try host.performBannerAction(.more, udid: udid)
+            try await ReplyBar.send(text ?? "", host: host, udid: udid)
             print("replied to: \(banner.label)")
             return
         }
         // Each action takes the banner off screen, so one still there means the guest ignored it.
-        try await BannerWatch.waitUntilGone(banner, adapter: adapter, udid: udid, timeout: 2)
+        try await BannerWatch.waitUntilGone(banner, host: host, udid: udid, timeout: 2)
         print("\(action.rawValue): \(banner.label)")
     }
 
     /// The banner's own Open accessibility action is not offered, and pressing it does nothing on
     /// Xcode 27 (27A266a), so opening is a real tap on its centre.
-    private func tap(_ banner: NotificationBanner, adapter: any SimulatorAdapter) async throws {
-        let orientation = try await DeviceOrientation.current(adapter, udid: udid)
+    private func tap(_ banner: NotificationBanner, host: any SimulatorHost) async throws {
+        let orientation = try await host.orientation(udid)
         guard let point = banner.normalizedCenter(orientation: orientation) else {
             throw EngineError.capabilityUnavailable(name: "the banner's position on screen")
         }
-        try await ReplyBar.tap(point, adapter: adapter, udid: udid)
+        try await ReplyBar.tap(point, host: host, udid: udid)
     }
 }
 
@@ -102,30 +102,30 @@ struct NotificationCommand: AsyncParsableCommand {
 enum ReplyBar {
     static let fieldRoles: Set<String> = ["AXTextArea", "AXTextField"]
 
-    static func send(_ text: String, adapter: any SimulatorAdapter, udid: String) async throws {
-        let orientation = try await DeviceOrientation.current(adapter, udid: udid)
-        let field = try await findField(adapter: adapter, udid: udid, timeout: 3)
-        let session = try adapter.openInput(udid)
+    static func send(_ text: String, host: any SimulatorHost, udid: String) async throws {
+        let orientation = try await host.orientation(udid)
+        let field = try await findField(host: host, udid: udid, timeout: 3)
+        let session = try host.openInput(udid)
         defer { session.close() }
         _ = try await Type.type(text, session: session, keyMilliseconds: 25)
 
-        guard let button = try findButton(beside: field, adapter: adapter, udid: udid),
+        guard let button = try findButton(beside: field, host: host, udid: udid),
               let point = button.normalizedCenter(orientation: orientation) else {
             throw EngineError.capabilityUnavailable(name: "the reply field's send button")
         }
-        try await tap(point, adapter: adapter, udid: udid)
+        try await tap(point, host: host, udid: udid)
 
         // Sending closes the bar, so a field still there means the tap did not send.
         let deadline = Date().addingTimeInterval(3)
         repeat {
             try await Task.sleep(for: .milliseconds(150))
-            if try fieldShown(at: field, adapter: adapter, udid: udid) == false { return }
+            if try fieldShown(at: field, host: host, udid: udid) == false { return }
         } while Date() < deadline
         throw ReplyNotSent()
     }
 
-    static func tap(_ point: CGPoint, adapter: any SimulatorAdapter, udid: String) async throws {
-        let session = try adapter.openInput(udid)
+    static func tap(_ point: CGPoint, host: any SimulatorHost, udid: String) async throws {
+        let session = try host.openInput(udid)
         defer { session.close() }
         try await session.touch(TouchEvent(phase: .began, points: [point]))
         try await Task.sleep(for: .milliseconds(90))
@@ -134,12 +134,12 @@ enum ReplyBar {
 
     /// Scans up from the bottom of the screen, where the bar sits above the keyboard, in the
     /// guest's rotated coordinates.
-    private static func findField(adapter: any SimulatorAdapter, udid: String, timeout: Double) async throws -> CGPoint {
+    private static func findField(host: any SimulatorHost, udid: String, timeout: Double) async throws -> CGPoint {
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
             for y in stride(from: 0.98, through: 0.3, by: -0.02) {
                 let point = CGPoint(x: 0.3, y: y)
-                if try fieldShown(at: point, adapter: adapter, udid: udid) { return point }
+                if try fieldShown(at: point, host: host, udid: udid) { return point }
             }
             try await Task.sleep(for: .milliseconds(150))
         } while Date() < deadline
@@ -148,15 +148,15 @@ enum ReplyBar {
         )
     }
 
-    private static func fieldShown(at shown: CGPoint, adapter: any SimulatorAdapter, udid: String) throws -> Bool {
-        guard let role = try adapter.accessibilityElement(udid, at: shown)?.element.role else { return false }
+    private static func fieldShown(at shown: CGPoint, host: any SimulatorHost, udid: String) throws -> Bool {
+        guard let role = try host.accessibilityElement(udid, at: shown)?.element.role else { return false }
         return fieldRoles.contains(role)
     }
 
     /// The first button found walking left from the right edge, along the field's row.
-    private static func findButton(beside field: CGPoint, adapter: any SimulatorAdapter, udid: String) throws -> AccessibilityHit? {
+    private static func findButton(beside field: CGPoint, host: any SimulatorHost, udid: String) throws -> AccessibilityHit? {
         for x in stride(from: 0.97, through: 0.5, by: -0.03) {
-            if let hit = try adapter.accessibilityElement(udid, at: CGPoint(x: x, y: field.y)),
+            if let hit = try host.accessibilityElement(udid, at: CGPoint(x: x, y: field.y)),
                hit.element.role == "AXButton" {
                 return hit
             }
@@ -176,7 +176,7 @@ enum BannerWatch {
     static let interval: Duration = .milliseconds(150)
 
     static func wait(
-        adapter: any SimulatorAdapter,
+        host: any SimulatorHost,
         udid: String,
         matching expected: [String],
         timeout: Double
@@ -184,7 +184,7 @@ enum BannerWatch {
         let deadline = Date().addingTimeInterval(timeout)
         var last: NotificationBanner?
         repeat {
-            if let banner = try adapter.notificationBanner(udid) {
+            if let banner = try host.notificationBanner(udid) {
                 last = banner
                 if banner.contains(expected) { return banner }
             }
@@ -195,13 +195,13 @@ enum BannerWatch {
 
     static func waitUntilGone(
         _ banner: NotificationBanner,
-        adapter: any SimulatorAdapter,
+        host: any SimulatorHost,
         udid: String,
         timeout: Double
     ) async throws {
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
-            guard let current = try adapter.notificationBanner(udid), current.label == banner.label else { return }
+            guard let current = try host.notificationBanner(udid), current.label == banner.label else { return }
             try await Task.sleep(for: interval)
         } while Date() < deadline
         throw BannerStillShowing(label: banner.label)

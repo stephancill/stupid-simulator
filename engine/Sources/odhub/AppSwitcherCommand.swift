@@ -36,8 +36,8 @@ struct AppSwitcher: AsyncParsableCommand {
     }
 
     private func send() async throws {
-        let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
-        let session = try adapter.openInput(udid)
+        let host = try SimulatorHosts.current()
+        let session = try host.openInput(udid)
         defer { session.close() }
 
         try await SystemGesture.appSwitcher(on: session, stepMilliseconds: stepMilliseconds)

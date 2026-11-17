@@ -40,8 +40,8 @@ struct Button: AsyncParsableCommand {
     }
 
     private func press() async throws {
-        let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
-        let session = try adapter.openInput(udid)
+        let host = try SimulatorHosts.current()
+        let session = try host.openInput(udid)
         defer { session.close() }
 
         try await session.button(button.hardware, phase: .down)
@@ -73,8 +73,8 @@ struct Rotate: AsyncParsableCommand {
         guard let value = DeviceOrientation(rawValue: orientation) else {
             throw ValidationError("Unknown orientation. Use one of: \(DeviceOrientation.allCases.map(\.rawValue).joined(separator: ", ")).")
         }
-        let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
-        try adapter.setOrientation(value, udid: udid)
+        let host = try SimulatorHosts.current()
+        try host.setOrientation(value, udid: udid)
         print("rotated to \(value.rawValue)")
     }
 }

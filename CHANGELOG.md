@@ -5,6 +5,12 @@ under it until the next heading becomes that version's release notes in the upda
 
 ## Unreleased
 
+- `stupidsim` runs on Linux. It drives the iOS simulators of [x86Sim](https://github.com/x86sim/x86sim),
+  which runs Apple's simulator runtimes on x86-64 Linux, with the same commands, arguments and
+  output as on a Mac: the accessibility tree, taps by label, `wait`, typing, keys, buttons,
+  gestures, rotation, screenshots, the pasteboard, pushes and notification banners, and `--verify`.
+  `stupidsim-<version>-linux-x86_64.tar.gz` installs it and fetches x86Sim. Expanding and replying
+  to a notification are not available there yet.
 - The Dynamic Island no longer blinks in the viewer window and in recordings while an agent takes
   screenshots or verifies input. `stupidsim screenshot` and `--verify` used `simctl io screenshot`,
   which makes the device hide the island while it captures. They now read the screen directly, so

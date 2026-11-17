@@ -18,6 +18,9 @@ public enum Brand {
     /// Read from the bundle that is running, which is where the release build writes it. A source
     /// build has no bundle and says so, so a development copy is never mistaken for a release.
     public static let version: String = {
+        #if !os(macOS)
+        if let packaged = packagedVersion() { return packaged }
+        #endif
         guard let version = runningBundle.infoDictionary?["CFBundleShortVersionString"] as? String,
               !version.isEmpty else {
             return developmentVersion
@@ -26,6 +29,18 @@ public enum Brand {
     }()
 
     public static let developmentVersion = "0.0.0-dev"
+
+    #if !os(macOS)
+    /// The Linux package has no bundle; scripts/build-linux.sh writes the version to
+    /// `share/stupidsim/version` beside `bin`.
+    static func packagedVersion() -> String? {
+        guard let executable = ExecutableLocator.runningExecutableURL() else { return nil }
+        let file = executable.deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "share/\(commandName)/version")
+        let text = (try? String(contentsOf: file, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text?.isEmpty == false ? text : nil
+    }
+    #endif
 
     /// The app this executable ships in. Run through a symlink, which is how Install Command Line
     /// Tool puts the CLI on the PATH, `Bundle.main` is the link's own folder and has no Info.plist,

@@ -21,8 +21,8 @@ struct HomeSwipe: AsyncParsableCommand {
     }
 
     private func send() async throws {
-        let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
-        let session = try adapter.openInput(udid)
+        let host = try SimulatorHosts.current()
+        let session = try host.openInput(udid)
         defer { session.close() }
 
         try await SystemGesture.home(on: session, stepMilliseconds: stepMilliseconds)

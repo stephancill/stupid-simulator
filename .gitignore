@@ -28,3 +28,4 @@ app/macos/Pods/
 third-party/
 
 __pycache__/
+dist/

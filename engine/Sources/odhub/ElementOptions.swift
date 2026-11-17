@@ -49,12 +49,9 @@ struct ElementOptions: ParsableArguments {
         }
     }
 
-    func snapshot(_ adapter: any SimulatorAdapter, udid: String) async throws -> Snapshot {
-        let target: AccessibilityTarget = springboard
-            ? .process(pid: try SimctlService().springBoardPID(udid: udid))
-            : .frontmost
-        let root = try adapter.accessibilityTree(udid, target: target)
-        let orientation = try await DeviceOrientation.current(adapter, udid: udid)
+    func snapshot(_ host: any SimulatorHost, udid: String) async throws -> Snapshot {
+        let root = try host.accessibilityTree(udid, springboard: springboard)
+        let orientation = try await host.orientation(udid)
         return Snapshot(
             matches: query.matches(in: root, screen: root.frame, orientation: orientation),
             root: root,
@@ -64,14 +61,14 @@ struct ElementOptions: ParsableArguments {
 
     /// Polls the tree until exactly one element matches on screen, then returns it. A tree that
     /// cannot be read yet (the app still launching) is retried like one without a match.
-    func find(_ adapter: any SimulatorAdapter, udid: String, timeout: Double) async throws -> AccessibilityQuery.Match {
+    func find(_ host: any SimulatorHost, udid: String, timeout: Double) async throws -> AccessibilityQuery.Match {
         let deadline = Date().addingTimeInterval(timeout)
         while true {
             var resolution: AccessibilityQuery.Resolution?
             var readError: (any Error)?
             var last: Snapshot?
             do {
-                let snapshot = try await snapshot(adapter, udid: udid)
+                let snapshot = try await snapshot(host, udid: udid)
                 last = snapshot
                 resolution = query.resolve(snapshot.matches, index: index)
             } catch {

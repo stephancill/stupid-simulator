@@ -66,11 +66,11 @@ struct Tap: AsyncParsableCommand {
     @OptionGroup var verification: Verification
 
     func run() async throws {
-        let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
+        let host = try SimulatorHosts.current()
         let point: CGPoint
         var description = ""
         if element.isSet {
-            let match = try await element.find(adapter, udid: udid, timeout: timeout)
+            let match = try await element.find(host, udid: udid, timeout: timeout)
             // `find` only returns matches on screen.
             guard let center = match.center else { throw ValidationError("\(match.line) has no centre on screen.") }
             point = center
@@ -80,11 +80,11 @@ struct Tap: AsyncParsableCommand {
         } else {
             point = CGPoint(x: x ?? 0, y: y ?? 0)
         }
-        try await verification.check(udid) { try await send(adapter, at: point, description: description) }
+        try await verification.check(udid) { try await send(host, at: point, description: description) }
     }
 
-    private func send(_ adapter: any SimulatorAdapter, at point: CGPoint, description: String) async throws {
-        let session = try adapter.openInput(udid)
+    private func send(_ host: any SimulatorHost, at point: CGPoint, description: String) async throws {
+        let session = try host.openInput(udid)
         defer { session.close() }
 
         let hold = holdMilliseconds ?? (long ? Self.longHoldMilliseconds : Self.defaultHoldMilliseconds)

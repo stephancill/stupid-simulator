@@ -1,6 +1,8 @@
 import CoreGraphics
 import Foundation
+#if canImport(ImageIO)
 import ImageIO
+#endif
 
 /// One screenshot as 32 bit pixels, for comparing frames rather than showing them.
 public struct ScreenFrame: Sendable, Equatable {
@@ -15,6 +17,7 @@ public struct ScreenFrame: Sendable, Equatable {
         self.pixels = pixels
     }
 
+    #if canImport(ImageIO)
     /// Decodes a PNG, which is what `simctl io screenshot` writes.
     public init(png: Data) throws {
         guard let source = CGImageSourceCreateWithData(png as CFData, nil),
@@ -45,6 +48,7 @@ public struct ScreenFrame: Sendable, Equatable {
         guard drawn else { throw EngineError.capabilityUnavailable(name: "decoding the screenshot") }
         self.init(width: width, height: height, pixels: pixels)
     }
+    #endif
 }
 
 /// Whether input changed what the device shows. A screen that is already changing on its own, a

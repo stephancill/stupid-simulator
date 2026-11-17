@@ -74,6 +74,7 @@ struct Push: AsyncParsableCommand {
     }
 
     func run() async throws {
+        let host = try SimulatorHosts.current()
         var json = try payloadJSON()
         // Read before the extension runs: one that replaces userInfo drops the payload's
         // "Simulator Target Bundle" key, so the app is named to simctl explicitly.
@@ -85,19 +86,18 @@ struct Push: AsyncParsableCommand {
             throw NoAvatar(reason: "the Notification Service Extension did not run: the payload needs \"mutable-content\": 1 and the app a service extension")
         }
         do {
-            try SimctlService().push(json, bundleID: app, udid: udid)
+            try host.push(json, bundleID: app, udid: udid)
         } catch EngineError.simctl(_, _, let stderr) where stderr.contains(Self.notAuthorized) {
             throw PushNotAuthorized(target: target)
         }
         print("sent a push to \(target)")
         guard verify else { return }
         // The command's own line comes before the verdict, even when stdout is a pipe.
-        fflush(stdout)
+        fflush(nil)
 
         let expected = expect.isEmpty ? Self.alertText(inPayload: json) : expect
-        let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
         do {
-            let banner = try await BannerWatch.wait(adapter: adapter, udid: udid, matching: expected, timeout: verifyTimeout)
+            let banner = try await BannerWatch.wait(host: host, udid: udid, matching: expected, timeout: verifyTimeout)
             print("verified: \(banner.label)")
         } catch let error as BannerNotFound {
             FileHandle.standardError.write(Data("\(error.description)\n".utf8))
@@ -111,6 +111,7 @@ struct Push: AsyncParsableCommand {
     /// Runs the app's service extension when a device would, and returns the payload to deliver in
     /// its place, or nil when the extension does not apply.
     private func serviceExtension(_ json: String, target: String) throws -> String? {
+        #if os(macOS)
         guard let original = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
               let aps = original["aps"] as? [String: Any],
               (aps["mutable-content"] as? Int) == 1,
@@ -142,8 +143,17 @@ struct Push: AsyncParsableCommand {
         let payload = serviced.payload(replacing: original)
         let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         return String(decoding: data, as: UTF8.self)
+        #else
+        // Running an extension takes simctl and the Mac's CoreSimulator; delivering the payload
+        // as it is would show something other than a device shows, so say so instead.
+        guard let original = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+              let aps = original["aps"] as? [String: Any],
+              (aps["mutable-content"] as? Int) == 1 else { return nil }
+        throw ServiceExtensionUnavailable()
+        #endif
     }
 
+    #if os(macOS)
     private static func describe(_ content: ServicedContent) -> String {
         [("title", content.title), ("subtitle", content.subtitle), ("body", content.body)]
             .filter { !$0.1.isEmpty }
@@ -166,6 +176,7 @@ struct Push: AsyncParsableCommand {
         }
         return "no avatar attached"
     }
+    #endif
 
     static func targetBundle(inPayload json: String) -> String? {
         (try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])?["Simulator Target Bundle"] as? String
@@ -212,6 +223,15 @@ struct Push: AsyncParsableCommand {
         Check the app is allowed to send notifications and that, when it is in front, it presents \
         them.
         """
+}
+
+struct ServiceExtensionUnavailable: Error, CustomStringConvertible {
+    var description: String {
+        """
+        The payload has "mutable-content": 1, and Notification Service Extensions only run on a Mac's \
+        simulators. Pass --skip-service-extension to deliver it as it is.
+        """
+    }
 }
 
 struct NoAvatar: Error, CustomStringConvertible {

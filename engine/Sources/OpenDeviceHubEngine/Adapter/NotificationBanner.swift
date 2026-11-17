@@ -1,7 +1,11 @@
+#if os(macOS)
 import AppKit
+#endif
 import CoreGraphics
 import Foundation
+#if os(macOS)
 import OpenDeviceHubPrivate
+#endif
 
 /// A notification banner SpringBoard is showing over whatever is in front.
 public struct NotificationBanner: Codable, Sendable, Hashable {
@@ -40,6 +44,7 @@ public enum NotificationBannerAction: String, Sendable, CaseIterable {
     case dismiss = "Dismiss"
 }
 
+#if os(macOS)
 // Verified on Xcode 27 (27A266a) with an iOS 27.0 device: in SpringBoard's tree a banner is an AXGroup
 // labelled "Notification" with no children. Hit testing its centre answers the
 // NotificationShortLookView inside it, which carries the text and the custom actions. Identified by
@@ -141,3 +146,4 @@ extension AccessibilityTreeReader {
         throw EngineError.privateCall(symbol: "NSAccessibilityCustomAction", message: "\(custom.name) has no handler or target")
     }
 }
+#endif

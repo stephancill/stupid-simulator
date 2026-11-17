@@ -10,11 +10,13 @@ struct List: ParsableCommand {
 
     static let configuration = CommandConfiguration(
         commandName: "list",
-        abstract: "List the simulators the active Xcode knows about."
+        abstract: "List the simulators the active Xcode (on Linux, x86Sim) knows about."
     )
 
+    #if os(macOS)
     @Option(help: "Where to read devices from: the private adapter or simctl.")
     var source: Source = .adapter
+    #endif
 
     @Flag(help: "Include devices whose runtime is not installed.")
     var all = false
@@ -51,15 +53,23 @@ struct List: ParsableCommand {
             print("\(name)  \(runtime)  \(state)  \(device.udid)\(unavailable)")
         }
         print("")
+        #if os(macOS)
         print("\(devices.count) device\(devices.count == 1 ? "" : "s") via \(source.rawValue)")
+        #else
+        print("\(devices.count) device\(devices.count == 1 ? "" : "s") via x86Sim")
+        #endif
     }
 
     private func read() throws -> [DeviceInfo] {
+        #if os(macOS)
         switch source {
         case .adapter:
             return try AdapterFactory.make(for: XcodeLocator.locate()).devices()
         case .simctl:
             return try SimctlService().listDevices()
         }
+        #else
+        return try SimulatorHosts.current().devices()
+        #endif
     }
 }

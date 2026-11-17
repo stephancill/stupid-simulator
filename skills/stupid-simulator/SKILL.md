@@ -23,6 +23,23 @@ https://github.com/stephancill/stupid-simulator/releases, then **stupid simulato
 Line Tool**. It also runs straight from `/Applications/stupid simulator.app/Contents/MacOS/stupidsim`.
 Scripts find it through `$STUPIDSIM`, then `PATH`, then that path.
 
+### On Linux (x86Sim)
+
+`stupidsim` also runs on x86-64 Linux against [x86Sim](https://github.com/x86sim/x86sim)'s iOS
+simulators, with the same commands and output; install it from the release's
+`stupidsim-<version>-linux-x86_64.tar.gz` (`install.sh` also fetches x86Sim). `stupidsim doctor`
+there reports x86Sim, the in-device helper and each device's frames. Differences that matter:
+
+- A device is booted from x86Sim's launcher, not simctl. Name it by UDID or by its x86Sim name
+  (`stupidsim ui-tree ss`); `booted` works as on a Mac.
+- Each tree read (`ui-tree`, `tap --label`, `wait`) takes about a second; input and screenshots are
+  instant.
+- `notification expand` and `reply` are refused; a payload with `"mutable-content": 1` needs
+  `--skip-service-extension`. `view` opens x86Sim's own window.
+- The `scripts/` here wrap `xcrun simctl` and do not run on Linux. x86Sim's own command line
+  (`~/.local/share/stupidsim/x86sim/AppRun x86sim launch|install|openurl|location|privacy ...`,
+  with `X86SIM_DEVICE` set to the device's directory) follows simctl's.
+
 ## The loop: read, act, verify
 
 ```bash

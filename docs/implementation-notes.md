@@ -3,6 +3,104 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## `stupidsim` on Linux, through x86Sim
+
+[x86Sim](https://github.com/x86sim/x86sim) runs Apple's arm64 iOS simulator runtimes unmodified on
+x86-64 Linux: it downloads a runtime from Apple's catalogue, runs it on Darling and translates arm64
+to x86-64. `stupidsim` now builds on Linux and drives x86Sim's devices with the same commands,
+arguments and output as on a Mac. Verified with x86Sim 0.3.0 and the iOS 27.2 runtime (24B8117) on
+Ubuntu 24.04 under WSL 2, built with Swift 6.2.4.
+
+- **One interface, two hosts.** Every command now asks a `SimulatorHost` (engine `Host/`) instead of
+  making a `SimulatorAdapter` and a `SimctlService` itself. `XcodeSimulatorHost` wraps exactly what
+  the commands used before, so nothing changes on a Mac; `X86SimHost` is the Linux one.
+  `SimulatorHosts.current()` picks by platform. The orientation lookup moved from the CLI into the
+  Mac host. Input sessions, accessibility elements, banners and frames keep their engine types, so
+  `tap --label`, `wait`, `--verify` and the gestures needed no Linux code of their own.
+- **Input and frames are read directly, not through x86Sim's command line.** x86Sim's simhid takes
+  text lines on a Unix socket in the device's data directory (`touch down|move|up x y [edge]`,
+  normalized portrait native like `TouchEvent`; `touch2`; `key down|up usage`; `button name
+  down|up`; `orientation [name]`, after which it writes the orientation to `data/orientation`).
+  simfb publishes every frame to a shared-memory ring, `/dev/shm/x86sim-a64[-<name>]-simfb.ring`
+  (layout in `FrameRing.swift`). A device is booted when its socket accepts a connection. Devices
+  are the `var/device-a64*` directories in x86Sim's data directory, with `name`, `model`, `runtime`
+  and a `sim.env` whose `SIMULATOR_UDID` is the UDID stupidsim prints and takes; the device's name
+  is accepted in place of it. Screenshots are the ring's newest frame, encoded as PNG with zlib
+  (the `CZlib` target), in about 0.1 s.
+- **x86Sim's command line** is used only for what needs the device's own processes: `spawn` (the
+  helper below), `push`, and `view`, which opens x86Sim's GTK viewer. It is found through
+  `$STUPIDSIM_X86SIM`, else `$XDG_DATA_HOME/stupidsim/x86sim/AppRun`, where the Linux installer
+  extracts x86Sim's AppImage. It must be an extracted `AppRun`, and an AppImage is refused: the
+  AppImage runtime forks a FUSE helper for every run, Foundation's `Process` on Linux neither reaped
+  the AppImage's process nor saw the end of a pipe the helper held, so commands hung, and with that
+  fixed (`posix_spawn` and `waitpid`, output in files) each run still left its helper and mount
+  behind, 38 after one `push --verify`.
+- **stupidsim-guest** (`guest/`) answers what can only be read inside the device: the accessibility
+  tree, hit testing, notification banners and the pasteboard. It is an arm64 iOS simulator program,
+  built on a Mac by `scripts/build-guest.sh` and committed in `guest/bin`, because Linux has no iOS
+  simulator SDK. stupidsim runs it with `x86sim spawn` (about 0.8 s a call) and reads the JSON it
+  prints between marker lines, since spawn mixes x86Sim's own lines into the same output.
+  - It reads AXRuntime's `AXElement`, the framework VoiceOver and XCTest use, after turning on app
+    accessibility and automation (`_AXSApplicationAccessibilitySetEnabled`,
+    `_AXSSetAutomationEnabled`). The app in front comes from `+[AXElement
+    defaultSystemShellCurrentApplications]`; asked through the system-wide element instead,
+    AXRuntime logs that it must be the system shell and answers nothing. `--springboard` reads
+    `+defaultSystemShellApplication`.
+  - The tree is the app's `explorerElements`, the flat list VoiceOver visits, which is what
+    AXPTranslator presents on a Mac. On StupidSocial's feed every element the Mac tree has came back
+    with the same label and exactly the same frame. The Mac folds the navigation bar into one
+    `Group`, hiding its Search and Settings buttons; the guest lists both, so `tap --label Settings`
+    finds them on Linux.
+  - `-[AXElement identifier]` answers "0" for every element; the accessibility identifier is
+    `axIdentifier`. `-value` answers nil where an element has one ("2 apps" on a home screen
+    folder); the value is AXRuntime attribute 2006, read through `-[AXUIElement
+    objectWithAXAttribute:]`.
+  - Roles come from UIAccessibilityTraits, matched against the Mac translator on StupidSocial, the
+    Settings app and the home screen: button, link, image, static text, header (Heading),
+    adjustable (Slider), search field and text entry (bits 10 and 18, TextField), and bit 22, a home
+    screen icon, which the Mac calls a Button.
+  - Hit testing (`ui-tree --at`) is `+[AXElement elementAtCoordinate:withVisualPadding:]`.
+  - The banner is the SpringBoard element whose `axIdentifier` is `NotificationShortLookView`, with
+    its custom actions' names (More, Dismiss), the same as on a Mac.
+  - The pasteboard is UIPasteboard. Its `string` waits for work it queues on the main thread, so it
+    runs on a background queue while the main thread runs its run loop. Reading another app's
+    pasteboard needs `com.apple.Pasteboard.paste-unchecked`, else it waits for the paste prompt a
+    process with no UI cannot answer. The committed helper is signed with it; x86Sim honours it. A
+    Mac's simulator refuses to start any program claiming it ("Security policy issue"), so
+    `scripts/build-guest.sh --mac-simulator` builds an unentitled copy for trying the helper there.
+- **`--verify`** took its three baseline frames back to back. simctl's screenshots took about 0.3 s
+  each, which is what spread them over a second; x86Sim's ring answers in milliseconds, so the
+  frames missed a story ring's animation and `type` with no field focused "verified". Baseline frames
+  are now at least 0.4 s apart and the polling after the input waits 50 ms between frames. On a Mac,
+  where a frame takes longer than that, nothing changes.
+- **Notification banners.** `push --verify` and `notification show` and `open` work. Dismiss swipes
+  the banner up, as a person does: performing an AXRuntime custom action takes an action number it
+  does not publish, and probing for it with a wrong one restarted SpringBoard. Expanding (and so
+  `notification reply`) is refused on Linux: neither pulling the banner down nor a long press
+  expanded it under x86Sim. A payload with `"mutable-content": 1` is refused unless
+  `--skip-service-extension` is given, since running the app's Notification Service Extension
+  needs a Mac's simulator.
+- **The Linux build** is a `#if os(Linux)` branch of `Package.swift` with only the command line, a
+  listed set of portable engine sources (anything else is excluded, so a file added upstream never
+  breaks it), and a `CoreGraphics` module (`engine/Linux/CoreGraphics`) that re-exports Foundation,
+  which has CGPoint, CGSize and CGRect on Linux, so the engine's `import CoreGraphics` lines stand.
+  The macOS-only parts of `SimulatorAdapter.swift`, `AccessibilityTree.swift`,
+  `NotificationBanner.swift` and `ScreenChange.swift` are inside `#if os(macOS)` or
+  `#if canImport(ImageIO)`. Glibc's `stdout` is a mutable global Swift 6 refuses to touch, so the
+  CLI flushes with `fflush(nil)`. `scripts/build-linux.sh` builds with the Swift runtime linked
+  statically and packages `bin/stupidsim`, `libexec/stupidsim/stupidsim-guest`,
+  `share/stupidsim/version` (which `Brand.version` reads, there being no bundle) and `install.sh`,
+  which also downloads x86Sim's AppImage, checks it against the release's SHA-256 and extracts it. x86Sim is
+  GPL-3.0 and is never bundled or linked: stupidsim only runs it.
+- **Seen under x86Sim, not fixed:** a system alert (a notification permission prompt over another
+  app) was on screen for 30 s without appearing in either tree, and appeared after the device was
+  rotated. `rotate --verify` on an iPhone's home screen reports no change, correctly, since
+  SpringBoard stays portrait. With Mesa's dozen (Vulkan over Direct3D 12 in WSL), x86Sim's Metal
+  drew on the GPU but corrupted frames; lavapipe (Vulkan on the CPU) drew them correctly.
+- **Apple's licence** for Xcode and its simulator runtimes covers Apple-branded computers. x86Sim
+  downloads the runtime on the user's machine rather than redistributing it, but running it on
+  other hardware is the user's call; the README says so.
+
 ## Communication Notification avatars from `push`
 
 - `push` used to print the same "the sender's avatar is not shown" line for every Communication

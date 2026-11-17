@@ -31,6 +31,8 @@ It keeps upstream's app and adds what driving simulators from scripts and agents
   iPhones and iOS 26 runtimes.
 - **No silent success**: `--verify` on every input command, and `paste` checks what it placed.
 - **`screenshot`**, **`list --json`** and **`booted`** in place of a UDID.
+- **`stupidsim` on Linux**, driving [x86Sim](https://github.com/x86sim/x86sim)'s iOS simulators
+  with the same commands.
 
 What changed, why, and what was verified on which Xcode and runtime is in
 [docs/implementation-notes.md](docs/implementation-notes.md).
@@ -57,6 +59,29 @@ again.
 
 Then, in a new terminal, `stupidsim doctor` reports what it found and `stupidsim list` shows your
 simulators.
+
+### On Linux
+
+`stupidsim` also runs on x86-64 Linux, where it drives the iOS simulators of
+[x86Sim](https://github.com/x86sim/x86sim), which runs Apple's own simulator runtimes on Linux. The
+commands, arguments and output are the same as on a Mac; the window is x86Sim's. Unpack
+`stupidsim-<version>-linux-x86_64.tar.gz` from [Releases](https://github.com/stephancill/stupid-simulator/releases)
+and run its installer:
+
+```sh
+tar xzf stupidsim-*-linux-x86_64.tar.gz && ./stupidsim-*-linux-x86_64/install.sh
+```
+
+It puts `stupidsim` in `~/.local/bin`, downloads x86Sim's AppImage, checked against its published
+checksum, and extracts it to `~/.local/share/stupidsim/x86sim`. Run
+`~/.local/share/stupidsim/x86sim.AppImage` once: its setup downloads an iOS runtime from Apple
+(about 8 GB) and creates a device. Start the device, then `stupidsim doctor` and `stupidsim list`. A
+device is named by its UDID or by its x86Sim name. `$STUPIDSIM_X86SIM` points `stupidsim` at
+another extracted copy of x86Sim (its `AppRun`).
+
+x86Sim is a separate GPL-3.0 project by other people; `stupidsim` only runs it. Apple's licence for
+its simulator runtimes is written for Apple-branded computers: x86Sim downloads them on your machine
+rather than redistributing them, but whether to run them elsewhere is yours to decide.
 
 ## For agents
 
@@ -178,6 +203,9 @@ or pasteboard sync has overwritten it.
 - **The compact layout below 340 points wide** is written and unit tested but has never been used by
   hand.
 - **Other Apple platforms**: tvOS, watchOS and visionOS simulators are not supported.
+- **On Linux**, `notification expand` and `reply` are refused, a push that would run a Notification
+  Service Extension needs `--skip-service-extension`, the viewer is x86Sim's, and `list --source` and
+  the window options of `view` are Mac only. Reading the tree takes about a second a call.
 
 Want to help close one of these? Pull requests are welcome. [ROADMAP.md](ROADMAP.md) is where that
 list is going: location, push, biometrics, proxy certificates, device management, and the project
@@ -213,6 +241,9 @@ launched by name rather than through the link.
 
 macOS 14 or later, Apple silicon, and Xcode 26 or 27 with at least one iOS simulator runtime.
 
+On Linux: x86-64 with glibc 2.39 or newer and what [x86Sim needs](https://github.com/x86sim/x86sim#requirements)
+(a Vulkan driver, or its software rendering, 16 GB of memory and about 45 GB free for a runtime).
+
 Apple silicon only, and not by preference: the simulator frameworks this app loads from Xcode ship
 as `arm64e` with no Intel slice, so an Intel build would launch and then fail at the first framework
 load.
@@ -228,6 +259,11 @@ swift test --package-path engine
 Use `scripts/build.sh` rather than `swift build` directly: SwiftPM records the deployment target as
 the linked SDK version, and AppKit then gives the window its pre macOS 26 appearance. Tests that
 need a booted simulator are gated behind `ODH_INTEGRATION=1` and skip otherwise.
+
+On Linux, with Swift 6.2 or newer and zlib's headers (`zlib1g-dev`), `scripts/build-linux.sh` builds
+the command line and packages it as `dist/stupidsim-<version>-linux-x86_64.tar.gz`. The helper it
+runs inside x86Sim's devices, `guest/bin/stupidsim-guest`, is an iOS simulator program and is built
+on a Mac with `scripts/build-guest.sh`.
 
 Source builds are signed ad hoc and need no Apple account or certificates. They report version
 `0.0.0-dev` and carry no update channel, so in-app updates stay off unless an update signing key is

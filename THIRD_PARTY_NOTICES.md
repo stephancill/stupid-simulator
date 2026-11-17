@@ -53,6 +53,15 @@ the device the other way, and the screenshot button becoming a stop button while
 `DuoHingeAnimation`: a fold to a preset takes between 0.35 and 1 second by the distance moved, and
 follows a quintic ease in and out, with one clock driving the guest's hinge and the model.
 
+## Interoperating with x86Sim
+
+https://github.com/x86sim/x86sim, GPL-3.0-or-later. No x86Sim code is included in or linked into
+stupid simulator. On Linux, `stupidsim` runs x86Sim's AppImage as a separate program, and
+`Host/X86Sim` speaks the device interfaces x86Sim documents in its sources: the text lines its simhid
+reads from a Unix socket, and the layout of the shared-memory frame ring its simfb writes. The Linux
+installer downloads x86Sim's AppImage from its GitHub release and checks it against the published
+checksum; it is not redistributed.
+
 ## Dependencies
 
 ### swift-argument-parser

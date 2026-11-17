@@ -44,15 +44,12 @@ struct UITree: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
+        let host = try SimulatorHosts.current()
         if let at {
-            try await printElement(at: at, adapter: adapter)
+            try await printElement(at: at, host: host)
             return
         }
-        let target: AccessibilityTarget = springboard
-            ? .process(pid: try SimctlService().springBoardPID(udid: udid))
-            : .frontmost
-        let root = try adapter.accessibilityTree(udid, target: target)
+        let root = try host.accessibilityTree(udid, springboard: springboard)
 
         if json {
             let encoder = JSONEncoder()
@@ -60,14 +57,14 @@ struct UITree: AsyncParsableCommand {
             print(String(decoding: try encoder.encode(root), as: UTF8.self))
             return
         }
-        let orientation = try await DeviceOrientation.current(adapter, udid: udid)
+        let orientation = try await host.orientation(udid)
         printTree(root, screen: root.frame, orientation: orientation, depth: 0)
     }
 
-    private func printElement(at native: CGPoint, adapter: any SimulatorAdapter) async throws {
-        let orientation = try await DeviceOrientation.current(adapter, udid: udid)
+    private func printElement(at native: CGPoint, host: any SimulatorHost) async throws {
+        let orientation = try await host.orientation(udid)
         let shown = CoordinateMapper.shownPoint(fromPortraitNative: native, orientation: orientation)
-        guard let hit = try adapter.accessibilityElement(udid, at: shown) else {
+        guard let hit = try host.accessibilityElement(udid, at: shown) else {
             throw EngineError.capabilityUnavailable(name: "an accessible element at \(native.x),\(native.y)")
         }
         if json {

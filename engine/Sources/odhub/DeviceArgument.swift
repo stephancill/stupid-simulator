@@ -7,7 +7,7 @@ enum DeviceArgument {
 
     static func resolve(_ argument: String) throws -> String {
         guard argument == booted else { return argument }
-        let running = try AdapterFactory.make(for: XcodeLocator.locate()).devices().filter { $0.state == .booted }
+        let running = try SimulatorHosts.current().devices().filter { $0.state == .booted }
         switch running.count {
         case 1:
             return running[0].udid

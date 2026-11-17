@@ -25,8 +25,8 @@ struct Type: AsyncParsableCommand {
     }
 
     private func send() async throws {
-        let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
-        let session = try adapter.openInput(udid)
+        let host = try SimulatorHosts.current()
+        let session = try host.openInput(udid)
         defer { session.close() }
         let count = try await Self.type(text, session: session, keyMilliseconds: keyMilliseconds)
         print("typed \(count) keys")

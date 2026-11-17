@@ -38,6 +38,7 @@ struct View: AsyncParsableCommand {
         }
     }
 
+    #if os(macOS)
     func run() async throws {
         guard let running = ExecutableLocator.runningExecutableURL() else {
             throw ViewLaunchError.couldNotLocateSelf
@@ -78,6 +79,31 @@ struct View: AsyncParsableCommand {
             throw ExitCode(process.terminationStatus)
         }
     }
+    #else
+    /// x86Sim's own GTK viewer, one window per device: the mouse touches, the keyboard types.
+    func run() async throws {
+        let unsupported = [
+            (boot, "--boot"), (fps, "--fps"), (scale != nil, "--scale"), (!bezel, "--no-bezel"),
+            (keepOnTop, "--keep-on-top"), (resetWindowPosition, "--reset-window-position"),
+        ].filter(\.0).map(\.1)
+        guard unsupported.isEmpty else {
+            throw ValidationError("x86Sim's viewer does not take \(unsupported.joined(separator: ", ")).")
+        }
+        let host = try X86SimHost()
+        let devices = try udids.map { try host.device($0) }
+        // Several windows, or --detach, return at once; a single window is waited for.
+        let wait = !detach && devices.count == 1
+        if wait, let device = devices.first {
+            let status = try host.install.runAttached(["view"], device: device)
+            guard status == 0 else { throw ExitCode(status) }
+            return
+        }
+        for device in devices {
+            try host.install.run(["view", "--bg"], device: device)
+            print("Viewer started for \(device.name).")
+        }
+    }
+    #endif
 }
 
 enum ViewLaunchError: Error, LocalizedError {

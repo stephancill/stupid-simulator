@@ -39,6 +39,18 @@ Things the classic Simulator had, or that a simulator should simply be able to d
 - **Screenshot sets**: the same screen captured across several devices in one action, named and
   organised for the App Store.
 
+## Linux
+
+`stupidsim` runs on Linux against [x86Sim](https://github.com/x86sim/x86sim)'s simulators. What is
+left there:
+
+- **Expanding and replying to notifications**, which needs a way to perform a banner's custom
+  actions that does not risk SpringBoard.
+- **Notification Service Extensions** for simulated pushes, which run through a Mac's simulator
+  today.
+- **The agent skill's scripts**, which mostly wrap `xcrun simctl`; x86Sim's command line follows
+  simctl's, so most could run through it.
+
 ## Harder, or not yet certain
 
 Listed separately because the honest answer is that these might not work, or might not be worth what

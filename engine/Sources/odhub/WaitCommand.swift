@@ -33,14 +33,14 @@ struct Wait: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let adapter = try AdapterFactory.make(for: XcodeLocator.locate())
+        let host = try SimulatorHosts.current()
         let start = Date()
         let deadline = start.addingTimeInterval(timeout)
         var last: ElementOptions.Snapshot?
         var readError: (any Error)?
         while true {
             do {
-                let snapshot = try await element.snapshot(adapter, udid: udid)
+                let snapshot = try await element.snapshot(host, udid: udid)
                 last = snapshot
                 readError = nil
                 let onScreen = snapshot.matches.filter { $0.center != nil }

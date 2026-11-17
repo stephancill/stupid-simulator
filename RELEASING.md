@@ -57,6 +57,17 @@ Sparkle key pair, a feed repository served over HTTPS, and the Sparkle steps bel
    printing what Gatekeeper and `stapler validate` make of both. Both notarizations must say
    `status: Accepted`; it takes a few minutes. Logs are saved under `build/notarization/`.
 
+   Then build the Linux command line on an x86-64 Linux machine (Swift 6.2+, `zlib1g-dev`) from the
+   same commit, and copy `dist/stupidsim-<version>-linux-x86_64.tar.gz` and its `.sha256` into
+   `build/`:
+
+   ```sh
+   scripts/build-linux.sh
+   ```
+
+   If `guest/stupidsim-guest.m` changed since `guest/bin/stupidsim-guest` was last built, rebuild it
+   on the Mac with `scripts/build-guest.sh` and commit it first.
+
 4. **Check the artifacts** before publishing:
 
    ```sh
@@ -74,7 +85,8 @@ Sparkle key pair, a feed repository served over HTTPS, and the Sparkle steps bel
    git tag -a v<version> -m "stupid simulator <version>" && git push origin v<version>
    gh release create v<version> --repo stephancill/stupid-simulator \
      --title "stupid simulator <version>" --notes-file build/release-notes.md \
-     build/StupidSimulator-<version>.dmg build/StupidSimulator.dmg build/SHA256SUMS
+     build/StupidSimulator-<version>.dmg build/StupidSimulator.dmg build/SHA256SUMS \
+     build/stupidsim-<version>-linux-x86_64.tar.gz build/stupidsim-<version>-linux-x86_64.tar.gz.sha256
    ```
 
    The README's download button fetches `StupidSimulator.dmg` from the latest release, so it needs

@@ -1,6 +1,8 @@
 import CoreGraphics
 import Foundation
+#if os(macOS)
 import OpenDeviceHubPrivate
+#endif
 
 /// One element of a guest app's accessibility tree.
 public struct AccessibilityElement: Codable, Sendable, Hashable {
@@ -48,6 +50,7 @@ public enum AccessibilityTarget: Sendable, Hashable {
     case process(pid: Int32)
 }
 
+#if os(macOS)
 // On Xcode 27 (27A266a), AXPTranslator traps on the main thread and when supportsDelegateTokens or
 // accessibilityEnabled is set. The work queue keeps reads off main and serializes the singleton.
 final class AccessibilityTreeReader: @unchecked Sendable {
@@ -276,3 +279,4 @@ private extension Optional<String> {
         return self
     }
 }
+#endif

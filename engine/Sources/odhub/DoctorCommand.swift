@@ -5,9 +5,10 @@ import OpenDeviceHubEngine
 struct Doctor: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "doctor",
-        abstract: "Report the active Xcode, the simulator frameworks and what resolves from them."
+        abstract: "Report the active Xcode (on Linux, x86Sim), the simulator frameworks and what resolves from them."
     )
 
+    #if os(macOS)
     func run() throws {
         let install = try XcodeLocator.locate()
 
@@ -91,4 +92,58 @@ struct Doctor: ParsableCommand {
             }
         }
     }
+    #else
+    func run() throws {
+        let install: X86SimInstall
+        do {
+            install = try X86SimInstall.locate()
+        } catch {
+            print("x86Sim")
+            print("  not found: \(error.localizedDescription)")
+            throw ExitCode.failure
+        }
+        var failed = false
+
+        print("x86Sim")
+        print("  launcher: \(install.launcher.path)")
+        do {
+            print("  version:  \(try install.version())")
+        } catch {
+            failed = true
+            print("  version:  unreadable: \(error.localizedDescription)")
+        }
+        print("  data:     \(install.dataRoot.path)")
+
+        print("")
+        print(GuestHelper.programName)
+        do {
+            print("  found:    \(try GuestHelper(install: install).program.path)")
+        } catch {
+            failed = true
+            print("  missing:  \(error.localizedDescription)")
+        }
+
+        print("")
+        print("Devices")
+        let devices = try install.devices()
+        if devices.isEmpty {
+            print("  none: create one with `x86sim device create --model \"iPhone 17 Pro\" <name>`")
+        }
+        for device in devices {
+            let booted = device.isBooted
+            print("  \(booted ? "booted  " : "shutdown") \(device.name): \(device.model), \(device.runtimeName), \(device.udid)")
+            guard booted else { continue }
+            do {
+                let frame = try FrameRing.latest(at: device.frameRing)
+                print("           frames: \(frame.width)x\(frame.height) from \(device.frameRing.path)")
+            } catch {
+                failed = true
+                print("           frames: \(error.localizedDescription)")
+            }
+        }
+        if failed {
+            throw ExitCode.failure
+        }
+    }
+    #endif
 }
