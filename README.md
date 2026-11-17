@@ -135,7 +135,13 @@ audits. Link or copy the folder into your agent's skills directory.
 <summary>Command line</summary>
 
 Every command takes a simulator UDID, which `stupidsim list` prints, or `booted` for the only booted
-simulator. `stupidsim help <command>` has the full options.
+simulator. Leave it out to use `$STUPIDSIM_UDID`, or else the only booted simulator; `--udid <udid>`
+works too. `stupidsim help <command>` has the full options.
+
+`tap` and `wait` find elements the way `ui-tree` prints them, so a script names what it wants rather
+than copying coordinates: `--label` (exact, or else a case-insensitive part of the label), `--id`,
+`--role`, and `--index` when several match. `tap --label` waits for the element to appear first, and
+fails with what is on screen when it does not.
 
 CoreSimulator accepts input whether or not the device acts on it, so the input commands take
 `--verify`: the command then fails (exit 2) unless the screen changes, and exits 3 when the screen was
@@ -147,8 +153,9 @@ or pasteboard sync has overwritten it.
 | `doctor` | `stupidsim doctor` |
 | `list` | `stupidsim list --json` |
 | `view` | `stupidsim view A1B2C3D4 --boot` |
-| `tap` | `stupidsim tap booted --x 0.5 --y 0.5 --verify` |
-| `swipe` | `stupidsim swipe A1B2C3D4 --from-x 0.5 --from-y 0.8 --to-x 0.5 --to-y 0.2` |
+| `tap` | `stupidsim tap booted --label Save --role Button --verify`, `--at 0.5,0.5`, or `--x 0.5 --y 0.5`; `--long` for a long press |
+| `wait` | `stupidsim wait A1B2C3D4 --label "Saved" --timeout 10`, or `--gone` |
+| `swipe` | `stupidsim swipe A1B2C3D4 --from 0.5,0.8 --to 0.5,0.2` |
 | `pinch` | `stupidsim pinch A1B2C3D4 --from 0.2 --to 0.7` |
 | `type` | `stupidsim type A1B2C3D4 "Hello@example.com!"` |
 | `key` | `stupidsim key A1B2C3D4 delete --repeat 3` or `stupidsim key A1B2C3D4 cmd+a delete` |
@@ -161,7 +168,7 @@ or pasteboard sync has overwritten it.
 | `home-swipe` | `stupidsim home-swipe A1B2C3D4` |
 | `app-switcher` | `stupidsim app-switcher A1B2C3D4` |
 | `ui-tree` | `stupidsim ui-tree A1B2C3D4 --labelled`, `--springboard` or `--at 0.88,0.93` |
-| `screenshot` | `stupidsim screenshot booted -o screen.png` |
+| `screenshot` | `stupidsim screenshot booted screen.png` |
 
 </details>
 

@@ -19,5 +19,5 @@ enum DeviceArgument {
         }
     }
 
-    static let help = "The UDID of the simulator, or `booted` for the only booted one."
+    static let help = "The UDID of the simulator, or `booted` for the only booted one. Optional: defaults to $STUPIDSIM_UDID, then the only booted simulator. `--udid <udid>` also works."
 }

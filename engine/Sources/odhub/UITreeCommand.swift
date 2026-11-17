@@ -80,33 +80,12 @@ struct UITree: AsyncParsableCommand {
     }
 
     private func printTree(_ element: AccessibilityElement, screen: CGRect, orientation: DeviceOrientation, depth: Int) {
-        let isLabelled = element.label != nil || element.title != nil
-            || element.identifier != nil || element.value != nil
-        if !labelled || isLabelled {
+        if !labelled || element.isLabelled {
             let indent = String(repeating: "  ", count: labelled ? 0 : depth)
-            print(indent + describe(element, screen: screen, orientation: orientation))
+            print(indent + element.line(center: element.normalizedCenter(in: screen, orientation: orientation)))
         }
         for child in element.children {
             printTree(child, screen: screen, orientation: orientation, depth: depth + 1)
         }
-    }
-
-    private func describe(_ element: AccessibilityElement, screen: CGRect, orientation: DeviceOrientation) -> String {
-        var parts = [role(of: element)]
-        if let label = element.label { parts.append("\"\(label)\"") }
-        if let title = element.title, title != element.label { parts.append("title=\"\(title)\"") }
-        if let value = element.value { parts.append("value=\"\(value)\"") }
-        if let identifier = element.identifier { parts.append("id=\(identifier)") }
-        if let center = element.normalizedCenter(in: screen, orientation: orientation) {
-            parts.append(String(format: "@ %.2f,%.2f", center.x, center.y))
-        }
-        return parts.joined(separator: " ")
-    }
-
-    private func role(of element: AccessibilityElement) -> String {
-        guard let role = element.role, !role.isEmpty else {
-            return element.roleDescription ?? "Element"
-        }
-        return role.hasPrefix("AX") ? String(role.dropFirst(2)) : role
     }
 }

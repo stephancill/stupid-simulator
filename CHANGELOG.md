@@ -3,6 +3,20 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## Unreleased
+
+- `stupidsim tap --label Save` taps an element by what `ui-tree` prints, instead of coordinates
+  copied out of it. `--id`, `--role` and `--index` narrow it down. It waits for the element to
+  appear, and fails with the matches, or with what is on screen, rather than tapping the wrong thing.
+- `stupidsim wait --label Saved` waits for an element to appear, or with `--gone` to leave, in place
+  of a fixed `sleep`.
+- The simulator can be left out (it defaults to `$STUPIDSIM_UDID`, then the only booted one) or given
+  as `--udid`. `tap --at x,y`, `swipe --from x,y --to x,y` and `screenshot <udid> file.png` work too.
+- Taps hold for 120 ms instead of 90, which small fields sometimes missed. `tap --long` holds for a
+  long press.
+- The agent skill's `sim_temp.py` makes temporary simulators by cloning a template that has already
+  booted once, which skips the slow first boot, and claims and cleans them up.
+
 ## 0.4.9
 
 - The screenshot card can be dragged into Finder, Messages, a browser or anywhere else that takes a

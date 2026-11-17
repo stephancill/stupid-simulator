@@ -255,6 +255,59 @@ Releases are cut locally; the full procedure is in [RELEASING.md](../RELEASING.m
   ink on paper to match. The vector `icon.svg` was removed, as it was a copy of upstream's artwork.
   The drawing has a bold line so it still reads at 32 pixels.
 
+## Acting on elements, waiting, and lenient arguments
+
+- Why: 129 agent transcripts (4,245 `stupidsim` calls, late October to mid November 2026) showed
+  agents tapping by coordinates in nearly every case, grepping `ui-tree` for a label and cutting
+  the `@ x,y` out with `sed` (about 1,700 such pipes, and helper functions rewritten in many
+  sessions). An empty grep turned into "Missing value for '--x'". 2,900 commands slept a fixed time
+  between steps. Common wrong guesses were `--udid`, no UDID at all, `swipe --from x,y` and
+  `screenshot <udid> file.png`. `--hold-milliseconds 120` was passed on most taps because the
+  skill advised it for small fields.
+- `AccessibilityQuery` (engine) matches elements on the `ui-tree` line format: label or title
+  exactly when anything matches exactly, else a case-insensitive substring; `--id` exactly; `--role`
+  as printed, ignoring case. The tree's root (`Application "<name>"`) is skipped, because its label
+  is the app's name, which the Back button also carries. Resolving ignores off-screen matches
+  when any is on screen, collapses matches with the same centre (a cell and its own text), and
+  calls more than one an error unless `--index` picks one in tree order. Unit tested.
+- `tap --label/--id/--role` polls the tree every 250 ms up to `--timeout` (5 s). A read that fails
+  (no app answered while launching) is retried; ambiguity is reported at once, since waiting will
+  not resolve it. `wait` polls the same way and exits 2 on timeout, printing the matched lines on
+  success. `--springboard` on both searches SpringBoard's tree, for the home screen and its context
+  menus.
+- `DeviceArgumentNormalizer` (engine, unit tested) rewrites the command line before parsing: for
+  the commands that take one simulator first, `--udid X` moves to the first positional; with no UDID
+  or `booted` anywhere, `$STUPIDSIM_UDID` or `booted` is inserted. Positional text such as `type`'s
+  is never mistaken for a device, since only UUIDs and `booted` count as one. A UUID typed as text
+  would be, which no one is expected to do.
+- `tap` holds 120 ms by default (90 missed small search fields on Xcode 27 (27A266a)); `--long` holds
+  800 ms. `tap --at x,y`, `swipe --from x,y --to x,y` and a positional `screenshot` path are aliases.
+- Verified on Xcode 27 (27A266a) with an iOS 27.0 iPhone 17 Pro under heavy load (load average
+  500 to 800): `tap --udid <udid> --label General --role Button` opened General; `wait --label About`
+  through `STUPIDSIM_UDID` found it; `tap --label Settings` hit the Back button and passed
+  `--verify`; `swipe --from 0.5,0.8 --to 0.5,0.3` passed `--verify` and `wait --label General --gone`
+  then passed; `tap --springboard --label Settings --role Button --long` opened the icon's context
+  menu. With three simulators booted and no UDID, the command refused and listed them. Under that
+  load the first tap's `--verify` reported no change within its 3 s, though the tap had landed,
+  because the screen redrew later than that.
+
+## Fast temporary simulators (agent skill)
+
+- A simulator from `simctl create` does its one-time setup on first boot (data migration, caches,
+  indexing, asset downloads across a few hundred daemons), which took minutes on a busy Mac.
+  `scripts/sim_temp.py create` instead clones a shut-down template per device type and runtime
+  (`stupidsim-template <type> <runtime>`) that has booted once; `simctl clone` is an APFS copy. A
+  template is made on first use (one slow boot and 30 s of settling) or from an already-booted
+  simulator with `template --from`. A lock file keeps two agents from warming the same template.
+- Measured on the same machine under the same load: rebooting a simulator that had booted before
+  took 95 s to `bootstatus`; a clone of the template took 7 s.
+- It warns when `IOS_SIM_MAX_BOOTED` (3) simulators are already booted. Each booted iOS 27 simulator
+  ran about 215 processes, and four together used about five of eight cores at idle.
+- Claims go in `~/.cache/sim-claims/<udid>` under the nearest `claude`, `opencode` or `node`
+  ancestor's pid, so the claim stays alive as long as the agent. Claims written with `$$` or `$PPID`
+  named a shell that exited straight after the command. `release` deletes only `tmp-` simulators
+  not claimed by another live process, unless `--force`.
+
 ## Agent oriented CLI
 
 - Every command that takes a UDID also takes `booted`, meaning the one booted simulator. With none
