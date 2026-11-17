@@ -3,7 +3,7 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
-## Unreleased
+## 0.5.0
 
 - `stupidsim tap --label Save` taps an element by what `ui-tree` prints, instead of coordinates
   copied out of it. `--id`, `--role` and `--index` narrow it down. It waits for the element to
