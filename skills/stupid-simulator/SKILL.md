@@ -186,6 +186,7 @@ Run any with `--help`. Most take `--udid` (default: the booted simulator) and `-
 | Signed-in state | `sim_clone_state.py` | Copy an app's data container, app groups and the keychain from a busy simulator to another (created like the source unless `--target`); the source is only read. `--app` installs a simulator build first, `--launch` boots and opens it |
 | Apps | `app_launcher.py` | `--launch`, `--terminate`, `--restart`, `--install`, `--uninstall`, `--open-url`, `--list`, `--state`, launch `--args` and `--env KEY=VALUE` |
 | Device state | `appearance.py`, `status_bar.py`, `location.py` | Dark mode, Dynamic Type, locale/region; status bar presets (`--preset clean` gives 9:41); fixed coordinates, cities, GPX scenarios |
+| Biometrics | `biometrics.py` | `--enroll`/`--unenroll`/`--status` Face ID or Touch ID; `--match`/`--no-match` (`--type touch`) answers the prompt on screen. Passkeys need enrollment ("Simulator requires enrolled biometrics to use passkeys") |
 | Permissions, push | `privacy_manager.py`, `push_notification.py` | Grant/revoke/reset 13 services; simple or JSON push payloads |
 | Inspection | `accessibility_audit.py`, `app_state_capture.py`, `test_recorder.py`, `visual_diff.py` | Audit the tree, bug-report snapshots (screenshot, tree, logs, device), step-by-step test reports, screenshot diffs |
 | App data | `container.py`, `model_inspector.py` | Files, UserDefaults and Core Data stores in the sandbox; Core Data / SwiftData models from source |
