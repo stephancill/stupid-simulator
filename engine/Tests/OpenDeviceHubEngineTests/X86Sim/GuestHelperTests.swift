@@ -30,7 +30,7 @@ import Testing
         let json = Data("""
             {"children":[{"children":[],"frame":[[283.3,66],[39.7,36]],"label":"Search","role":"AXButton",
              "roleDescription":"button","traits":8589934593,"identifier":"search"}],
-             "frame":[[0,0],[402,874]],"label":"stupid social","pid":2743,"role":"AXApplication","roleDescription":"application"}
+             "frame":[[0,0],[402,874]],"label":"my app","pid":2743,"role":"AXApplication","roleDescription":"application"}
             """.utf8)
         let root = try JSONDecoder().decode(AccessibilityElement.self, from: json)
         #expect(root.role == "AXApplication")

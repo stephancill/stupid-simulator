@@ -13,7 +13,7 @@ under it until the next heading becomes that version's release notes in the upda
   to a notification are not available there yet.
 - A throwaway Linux machine, such as a Claude Code cloud session or a CI runner, gets a booted iOS
   simulator in about three minutes with one command and no credentials:
-  `curl -fsSL https://raw.githubusercontent.com/stephancill/stupid-simulator/main/linux/cloud-setup.sh | STUPIDSIM_APPS="stupidsocial" bash`,
+  `curl -fsSL https://raw.githubusercontent.com/stephancill/stupid-simulator/main/linux/cloud-setup.sh | bash`,
   then `stupidsim-linux boot`. It fetches only the runtime files tests read, x86Sim's translation
   cache and a device that has booted once, instead of 20 minutes and 36 GB from Apple. Measured in
   a Claude Code cloud session (4 vCPU, 16 GB): setup 90 s, boot 105 s, an app on screen 18 s after

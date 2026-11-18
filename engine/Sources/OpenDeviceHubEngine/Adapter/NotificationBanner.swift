@@ -10,7 +10,7 @@ import OpenDeviceHubPrivate
 /// A notification banner SpringBoard is showing over whatever is in front.
 public struct NotificationBanner: Codable, Sendable, Hashable {
     /// What VoiceOver reads: the app's name, when it arrived, then the title, subtitle and body,
-    /// joined by ", ". For example "STUPID SOCIAL, now, Hello, World".
+    /// joined by ", ". For example "MY APP, now, Hello, World".
     public var label: String
     /// In the guest's points.
     public var frame: CGRect

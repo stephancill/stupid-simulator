@@ -88,7 +88,7 @@ static NSArray *rect(CGRect r) {
 
 // UIAccessibilityTraits bits mapped to the roles AXPTranslator reports on a Mac for the same
 // elements, so `ui-tree` prints the same lines on both. Checked against Xcode 27's translator
-// (27A266a) on StupidSocial's feed and settings, the Settings app and the home screen: buttons,
+// (27A266a) on a SwiftUI test app's feed and settings, the Settings app and the home screen: buttons,
 // text, images, headings and text fields. Bit 10 is the search field, 18 text entry and 22 a home
 // screen icon, which the Mac calls a button.
 static void addRole(unsigned long long traits, NSMutableDictionary *into) {

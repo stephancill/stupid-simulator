@@ -4,7 +4,7 @@ import Testing
 
 struct NotificationBannerTests {
     let banner = NotificationBanner(
-        label: "STUPID SOCIAL, now, Hello, World",
+        label: "MY APP, now, Hello, World",
         frame: CGRect(x: 8, y: 58, width: 386, height: 66),
         screen: CGRect(x: 0, y: 0, width: 402, height: 874),
         actions: ["More", "Dismiss"]
