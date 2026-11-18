@@ -85,6 +85,22 @@ the first time something opens it, so any app runs without a recorded manifest.
   - But the installed test app was then missing from the app library
     (`FBSApplicationLibrary returned nil`).
   - Hiding parts of the system silently breaks things, so the runtime ships whole.
+- **Verified in a fresh Claude Code cloud session** (4 vCPU, 16 GB, store read through R2's S3
+  endpoint). It used `STUPIDSIM_LINUX` (`cloud-setup.sh` installs that file instead of the packaged
+  `stupidsim-linux`, for testing a branch).
+  - Setup took 120 s, the base pack last at 106 s.
+  - Boot took 404 s. It fetched 697 units, summing 252 s of fetching: about 0.36 s each from
+    R2, against 0.01 s from a local disk, so in the cloud the first boot's fetches are a large
+    part of it.
+  - Safari came to the front with its start page, and Maps in 27 s with its location prompt.
+  - Nothing failed to fetch, and 5.2 GB of memory was in use.
+- **A lazy machine traces without the whole runtime.** The FUSE server appends each file's first
+  open to `layers/opened.txt`.
+  - `trace begin` on a lazy runtime remounts it with that list emptied.
+  - `trace end NAME` writes the manifest from it: the files opened beyond the fetched packs,
+    which is what an app's pack should add.
+  - Recording a manifest therefore no longer needs the machine with the whole runtime. Only
+    packing it does (`store pack --manifest NAME`, one pack without rebuilding the store).
 - Machines set up before this change keep the old layout (`extracted/` a plain directory);
   setup refuses such a runtime and asks for it to be removed. `cloud-setup.sh` installs
   `fuse3`.
