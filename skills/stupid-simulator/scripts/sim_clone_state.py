@@ -18,8 +18,8 @@ must be installed on the target (pass --app to install a simulator build), becau
 the containers the state is copied into.
 
 Examples:
-  sim_clone_state.py --source <UDID> --bundle-id tech.stupid.StupidSocial --app path/to/App.app
-  sim_clone_state.py --source <UDID> --target <UDID> --bundle-id tech.stupid.StupidSocial --boot
+  sim_clone_state.py --source <UDID> --bundle-id com.example.myapp --app path/to/App.app
+  sim_clone_state.py --source <UDID> --target <UDID> --bundle-id com.example.myapp --boot
 """
 
 import argparse
