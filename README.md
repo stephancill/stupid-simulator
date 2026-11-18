@@ -86,26 +86,30 @@ minutes and 36 GB. `stupidsim-linux setup` does it in about three minutes instea
 first boot 105 s in a Claude Code cloud session), from a runtime store served read-only at
 `https://stupidsim-store.stupidtech.net`:
 
-- **Only the runtime files tests read.** The base every session needs is 6,158 of the runtime's
-  588,000 files, 1.8 GB compressed, and a typical app adds little (StupidSocial: 0.14 GB).
+- **Up front, only the runtime files a boot reads.** The base is 6,158 of the runtime's 588,000
+  files (1.8 GB compressed), plus every bundle's metadata (6 MB).
+- **Every other runtime file the first time something opens it.** The runtime is mounted as an
+  overlay over a FUSE file system that fetches a bundle at a time from the store, so any app runs,
+  and so do Safari, Maps and the other system apps. Mounting needs root.
 - **x86Sim's translation cache and a device that has already booted once**, so the first boot is a
   normal one.
 
-The parts are recorded by tracing on a machine with the whole runtime
-([docs/runbooks/app-manifest.md](docs/runbooks/app-manifest.md)), and each new iOS version is added
-with [docs/runbooks/new-ios-version.md](docs/runbooks/new-ios-version.md).
+An app's files can still be fetched up front, by recording a manifest on a machine with the whole
+runtime ([docs/runbooks/app-manifest.md](docs/runbooks/app-manifest.md)). Each new iOS version is
+added with [docs/runbooks/new-ios-version.md](docs/runbooks/new-ios-version.md).
 
-For a Claude Code cloud environment (or any x86-64 Ubuntu machine, as root or a normal user), no
-credentials are needed:
+For a Claude Code cloud environment (or any x86-64 Ubuntu machine, as root), no credentials are
+needed:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/stephancill/stupid-simulator/main/linux/cloud-setup.sh | STUPIDSIM_APPS="stupidsocial" bash
+curl -fsSL https://raw.githubusercontent.com/stephancill/stupid-simulator/main/linux/cloud-setup.sh | bash
 stupidsim-linux boot     # at the start of each session; waits for the home screen
 ```
 
 Put the first line in the environment's setup script, so its snapshot keeps the result, and the
-second at the start of each session. `STUPIDSIM_APPS` names the apps whose runtime files to fetch
-besides the base: an app without a manifest in the store installs, but never comes to the front.
+second at the start of each session. `STUPIDSIM_APPS` optionally names apps whose recorded runtime
+files to fetch up front; any other file is fetched when first opened, and logged in
+`~/.local/share/x86sim/runtimes/<runtime>/layers/lazy.log`.
 A store of your own works too: point `STUPIDSIM_PUBLIC_STORE` at it, or use the signed variables
 described in [`linux/stupidsim-linux`](linux/stupidsim-linux).
 

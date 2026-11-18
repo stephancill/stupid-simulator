@@ -11,9 +11,14 @@ machines (cloud agent sessions, CI), and records what an app needs from the iOS 
         Shut the device down, mark every runtime file unread, and boot it again. Then use the app.
     stupidsim-linux trace end NAME [--base base]
         Write manifests/NAME.txt: the runtime files read since `trace begin`, less those in --base.
+    stupidsim-linux mount | unmount [--device NAME]
+        Mount the runtime's lazy layers (boot does it); needs root. unmount undoes it.
     stupidsim-linux store build [--device NAME] [--manifest NAME ...]
         From a machine with the whole runtime: write the store's files for this runtime to
         $STUPIDSIM_STORE_DIR (skeleton, a pack per manifest, translation cache, device template).
+    stupidsim-linux store lazy [--device NAME]
+        From a machine with the whole runtime: write every runtime file to $STUPIDSIM_STORE_DIR as
+        range-readable blobs and an index, for fetching on first use.
     stupidsim-linux store publish
         Upload $STUPIDSIM_STORE_DIR to the store.
     stupidsim-linux store presign KEY [--hours N]
@@ -33,18 +38,29 @@ signed too. Layout, per runtime build:
     runtimes/<runtime>/warm/jitcache.tar.zst x86Sim's translation cache for the runtime
     runtimes/<runtime>/warm/device.tar.zst   a device that has booted once on it
     runtimes/<runtime>/warm/device.json      that device's original path and name
+    runtimes/<runtime>/lazy/index.sqlite.zst every entry of the runtime, and where each file's unit is
+    runtimes/<runtime>/lazy/blob-NNN         units (a bundle's files as one zstd-compressed tar) end to end
     current.json                             {"runtime": ..., "x86sim": ...}
 
-Only Python's standard library, curl, tar and zstd are used. Verified with x86Sim 0.3.0 and the iOS
-27.2 runtime (24B8117) on Ubuntu 24.04.
+The runtime on a set-up machine is an overlay mounted at extracted/: the skeleton and the fetched
+packs (layers/local) over a FUSE file system (layers/lazy, `lazy-serve`) that shows every other
+runtime file from the index and fetches its unit from the store when it is first opened. x86Sim's
+own writes into the runtime land in layers/upper. A file that cannot be fetched fails to open (EIO)
+and is logged in layers/lazy.log.
+
+Only Python's standard library, curl, tar, zstd and libfuse 3 are used. Verified with x86Sim 0.3.0
+and the iOS 27.2 runtime (24B8117) on Ubuntu 24.04.
 """
 import argparse
 import concurrent.futures
+import errno
 import functools
 import hashlib
 import json
 import os
+import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -217,6 +233,9 @@ def boot(name, metal="auto", timeout=900):
         return
     started = time.time()
     ensure_runtime_dir()
+    runtime = device_runtime(device)
+    if is_lazy(runtime):
+        mount_lazy(runtime)
     env = dict(vulkan_env(metal), A64_KEEP="1")
     run_x86sim(["shell", "-c", "cli/libexec/arm64/boot-a64.sh"], device=device, env=env)
     run_x86sim(["x86sim", "wait", "home", str(timeout)], device=device)
@@ -358,10 +377,13 @@ def public_store():
 
 
 def read_command(key):
-    """curl arguments that print one store object. In order: a presigned URL in
+    """curl arguments that print one store object. In order: a store directory on this machine in
+    $STUPIDSIM_LOCAL_STORE; a presigned URL in
     $STUPIDSIM_STORE_URLS (a JSON map of key to URL); signed with $STUPIDSIM_STORE_KEY_ID when set;
     the public address; signed with the embedded read-only key."""
     links = json.loads(os.environ.get("STUPIDSIM_STORE_URLS") or "{}")
+    if os.environ.get("STUPIDSIM_LOCAL_STORE"):  # a store directory on this machine (testing a store before publishing)
+        return CURL_GET + ["file://" + urllib.parse.quote(os.path.join(os.path.abspath(os.environ["STUPIDSIM_LOCAL_STORE"]), key))]
     if key in links:
         return CURL_GET + [links[key]]
     if os.environ.get("STUPIDSIM_STORE_KEY_ID"):
@@ -388,6 +410,19 @@ def fetch_and_extract(key, destination):
     curl.stdout.close()
     if curl.wait() != 0 or tar.returncode != 0:
         fail(f"could not fetch and unpack {key} (curl {curl.returncode}, tar {tar.returncode})")
+    return key
+
+
+def fetch_file(key, destination):
+    """One zstd-compressed store object, unpacked to a file."""
+    os.makedirs(os.path.dirname(destination), exist_ok=True)
+    with open(destination + ".part", "wb") as out:
+        curl = subprocess.Popen(read_command(key), stdout=subprocess.PIPE)
+        unpack = subprocess.run(["zstd", "-dcq"], stdin=curl.stdout, stdout=out)
+        curl.stdout.close()
+        if curl.wait() != 0 or unpack.returncode != 0:
+            fail(f"could not fetch {key} (curl {curl.returncode}, zstd {unpack.returncode})")
+    os.replace(destination + ".part", destination)
     return key
 
 
@@ -489,6 +524,455 @@ def store_build(device_name, manifests):
     log(f"store files for {runtime} are in {out_root}; upload them with: stupidsim-linux store publish")
 
 
+# ---------------------------------------------------------------- the lazy runtime: building it
+
+# A unit is what one fetch brings: the files of the innermost bundle a file is in (each .lproj on its own, so a
+# language nobody uses is never fetched), or of its directory outside bundles, in path order, split at UNIT_MAX.
+BUNDLE_SUFFIXES = (".framework", ".bundle", ".app", ".appex", ".xpc", ".plugin", ".axbundle", ".lproj")
+UNIT_MAX = 32 << 20     # uncompressed bytes per unit; a single larger file is a unit of its own
+BLOB_MAX = 4 << 30      # R2 takes at most 5 GiB in one PUT
+# Bundle metadata, read for every bundle when a new machine's device first boots: LaunchServices registers each app,
+# extension and framework again (the device template's database names another path), reading its Info.plist and its
+# InfoPlist strings in every language, and the App Intents metadata. On iOS 27.2 that was 26,642 units fetched
+# one by one (6 minutes from a local disk); all of it is 79,399 files, 46 MB, so it is fetched up front as a pack.
+METADATA_NAMES = re.compile(r"^(Info\.plist|InfoPlist.*\.(strings|loctable)|.*\.intentdefinition|AppShortcuts\.strings|"
+                            r"extract\..*data|version\.json)$")
+
+
+def unit_key(rel):
+    parts = rel.split("/")[:-1]
+    for i in range(len(parts) - 1, -1, -1):
+        if parts[i].endswith(BUNDLE_SUFFIXES):
+            return "/".join(parts[:i + 1])
+    return "/".join(parts)
+
+
+def lazy_entries(extracted):
+    """Every directory, symlink and regular file of the runtime in path order, without x86Sim's own per-device files."""
+    for directory, dirs, files in os.walk(extracted):
+        dirs[:] = sorted(d for d in dirs if not d.startswith(".x86sim-"))
+        rel_dir = os.path.relpath(directory, extracted)
+        rel_dir = "" if rel_dir == "." else rel_dir
+        for name in sorted(dirs + files):
+            path = os.path.join(directory, name)
+            st = os.lstat(path)
+            rel = os.path.join(rel_dir, name) if rel_dir else name
+            if stat.S_ISLNK(st.st_mode):
+                yield rel, "l", st, os.readlink(path)
+            elif stat.S_ISDIR(st.st_mode):
+                yield rel, "d", st, None
+            elif stat.S_ISREG(st.st_mode):
+                yield rel, "f", st, None
+
+
+def compress_unit(extracted, paths):
+    """One unit as a zstd-compressed tar (zstd keeps a checksum of the content, so a damaged range fails to unpack)."""
+    import io
+    import tarfile
+    raw = io.BytesIO()
+    with tarfile.open(fileobj=raw, mode="w", format=tarfile.GNU_FORMAT) as tar:
+        for rel in paths:
+            info = tar.gettarinfo(os.path.join(extracted, rel), arcname=rel)
+            info.uid = info.gid = 0
+            info.uname = info.gname = ""
+            with open(os.path.join(extracted, rel), "rb") as f:
+                tar.addfile(info, f)
+    out = subprocess.run(["zstd", "-q", "-10", "-c"], input=raw.getvalue(), stdout=subprocess.PIPE, check=True)
+    return out.stdout
+
+
+def store_lazy(device_name):
+    """Writes runtimes/<runtime>/lazy/: the index (a SQLite database) and the blobs, from the whole runtime."""
+    import sqlite3
+    out_root = os.environ.get("STUPIDSIM_STORE_DIR") or fail("STUPIDSIM_STORE_DIR is not set (where to write the store's files)")
+    runtime = device_runtime(device_dir(device_name))
+    extracted = os.path.join(runtime_dir(runtime), "extracted")
+    if os.path.ismount(extracted):
+        fail(f"{extracted} is a lazy mount; build the lazy store from a machine with the whole runtime")
+    out = os.path.join(out_root, "runtimes", runtime, "lazy")
+    shutil.rmtree(out, ignore_errors=True)
+    os.makedirs(out)
+    started = time.time()
+
+    db_path = os.path.join(out, "index.sqlite")
+    db = sqlite3.connect(db_path)
+    db.executescript("""
+        CREATE TABLE entries (parent TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL, mode INTEGER NOT NULL,
+            size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, unit INTEGER, target TEXT, PRIMARY KEY (parent, name))
+            WITHOUT ROWID;
+        CREATE TABLE units (id INTEGER PRIMARY KEY, blob TEXT NOT NULL, offset INTEGER NOT NULL, length INTEGER NOT NULL,
+            files INTEGER NOT NULL, size INTEGER NOT NULL, key TEXT NOT NULL);
+        CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    """)
+    rows, units = [], []  # units: [key, [paths], size]
+    for rel, kind, st, target in lazy_entries(extracted):
+        parent, name = os.path.split(rel)
+        unit = None
+        if kind == "f":
+            key = unit_key(rel)
+            if not units or units[-1][0] != key or (units[-1][2] and units[-1][2] + st.st_size > UNIT_MAX):
+                units.append([key, [], 0])
+            units[-1][1].append(rel)
+            units[-1][2] += st.st_size
+            unit = len(units) - 1
+        rows.append((parent, name, kind, stat.S_IMODE(st.st_mode), st.st_size if kind == "f" else 0, st.st_mtime_ns, unit, target))
+    db.executemany("INSERT INTO entries VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
+    files = sum(1 for r in rows if r[2] == "f")
+    packs = os.path.join(out_root, "runtimes", runtime, "packs")
+    os.makedirs(packs, exist_ok=True)
+    with tempfile.NamedTemporaryFile("w", delete=False) as listing:
+        listing.writelines(os.path.join(r[0], r[1]) + "\n" for r in rows if r[2] == "f" and METADATA_NAMES.match(r[1]))
+    pack(extracted, listing.name, os.path.join(packs, "metadata.tar.zst"))
+    os.remove(listing.name)
+    log(f"indexed {len(rows)} entries, {files} files in {len(units)} units ({time.time() - started:.0f} s)")
+
+    blob_index, blob, blob_size, total = 0, None, 0, 0
+    def open_blob():
+        nonlocal blob, blob_size, blob_index
+        if blob:
+            blob.close()
+            blob_index += 1
+        blob, blob_size = open(os.path.join(out, f"blob-{blob_index:03d}"), "wb"), 0
+    open_blob()
+    batch = 4 * (os.cpu_count() or 4)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
+        for first in range(0, len(units), batch):
+            chunk = units[first:first + batch]
+            for i, data in enumerate(pool.map(lambda u: compress_unit(extracted, u[1]), chunk)):
+                if blob_size and blob_size + len(data) > BLOB_MAX:
+                    open_blob()
+                key, paths, size = chunk[i]
+                db.execute("INSERT INTO units VALUES (?, ?, ?, ?, ?, ?, ?)",
+                           (first + i, f"blob-{blob_index:03d}", blob_size, len(data), len(paths), size, key))
+                blob.write(data)
+                blob_size += len(data)
+                total += len(data)
+            if first // batch % 50 == 0:
+                log(f"  {first + len(chunk)}/{len(units)} units, {total / 1e9:.2f} GB ({time.time() - started:.0f} s)")
+    blob.close()
+    db.executemany("INSERT INTO meta VALUES (?, ?)", [("runtime", runtime), ("format", "1")])
+    db.commit()
+    db.execute("VACUUM")
+    db.close()
+    subprocess.run(["zstd", "-q", "-19", "-T0", "--rm", "-f", db_path], check=True)
+    log(f"{out}: {blob_index + 1} blobs, {total / 1e9:.2f} GB, index {os.path.getsize(db_path + '.zst') / 1e6:.1f} MB "
+        f"({time.time() - started:.0f} s); upload with: stupidsim-linux store publish")
+
+
+# ---------------------------------------------------------------- the lazy runtime: serving it
+
+def layers_dir(runtime):
+    return os.path.join(runtime_dir(runtime), "layers")
+
+
+def is_lazy(runtime):
+    return os.path.isdir(layers_dir(runtime))
+
+
+class FuseBinding:
+    """The parts of libfuse 3's high-level API that a read-only file system needs, through ctypes (x86_64 Linux).
+    Struct layouts are libfuse 3.14's (Ubuntu 24.04), which keeps them stable across 3.x."""
+
+    def __init__(self):
+        import ctypes
+        import ctypes.util
+        self.c = ctypes
+        name = ctypes.util.find_library("fuse3") or "libfuse3.so.3"
+        try:
+            self.lib = ctypes.CDLL(name, use_errno=True)
+        except OSError as error:
+            fail(f"libfuse 3 is missing ({error}); install it with: apt-get install -y fuse3")
+        c = ctypes
+
+        class Timespec(c.Structure):
+            _fields_ = [("tv_sec", c.c_long), ("tv_nsec", c.c_long)]
+
+        class Stat(c.Structure):
+            _fields_ = [("st_dev", c.c_uint64), ("st_ino", c.c_uint64), ("st_nlink", c.c_uint64), ("st_mode", c.c_uint32),
+                        ("st_uid", c.c_uint32), ("st_gid", c.c_uint32), ("pad0", c.c_int32), ("st_rdev", c.c_uint64),
+                        ("st_size", c.c_int64), ("st_blksize", c.c_int64), ("st_blocks", c.c_int64), ("st_atim", Timespec),
+                        ("st_mtim", Timespec), ("st_ctim", Timespec), ("reserved", c.c_int64 * 3)]
+
+        self.Stat = Stat
+        self.fill_dir_t = c.CFUNCTYPE(c.c_int, c.c_void_p, c.c_char_p, c.c_void_p, c.c_int64, c.c_int)
+        self.GETATTR = c.CFUNCTYPE(c.c_int, c.c_char_p, c.POINTER(Stat), c.c_void_p)
+        self.READLINK = c.CFUNCTYPE(c.c_int, c.c_char_p, c.POINTER(c.c_char), c.c_size_t)
+        self.OPEN = c.CFUNCTYPE(c.c_int, c.c_char_p, c.c_void_p)
+        self.READ = c.CFUNCTYPE(c.c_int, c.c_char_p, c.POINTER(c.c_char), c.c_size_t, c.c_int64, c.c_void_p)
+        self.READDIR = c.CFUNCTYPE(c.c_int, c.c_char_p, c.c_void_p, self.fill_dir_t, c.c_int64, c.c_void_p, c.c_int)
+        # struct fuse_operations, in order; only the ones set are typed
+        names = ["getattr", "readlink", "mknod", "mkdir", "unlink", "rmdir", "symlink", "rename", "link", "chmod", "chown",
+                 "truncate", "open", "read", "write", "statfs", "flush", "release", "fsync", "setxattr", "getxattr",
+                 "listxattr", "removexattr", "opendir", "readdir", "releasedir", "fsyncdir", "init", "destroy", "access",
+                 "create", "lock", "utimens", "bmap", "ioctl", "poll", "write_buf", "read_buf", "flock", "fallocate",
+                 "copy_file_range", "lseek"]
+        typed = {"getattr": self.GETATTR, "readlink": self.READLINK, "open": self.OPEN, "read": self.READ, "readdir": self.READDIR}
+
+        class Operations(c.Structure):
+            _fields_ = [(n, typed.get(n, c.c_void_p)) for n in names]
+
+        self.Operations = Operations
+        self.lib.fuse_main_real.argtypes = [c.c_int, c.POINTER(c.c_char_p), c.POINTER(Operations), c.c_size_t, c.c_void_p]
+        self.lib.fuse_main_real.restype = c.c_int
+
+    def main(self, mountpoint, options, handlers):
+        c = self.c
+        ops = self.Operations()
+        keep = []
+        for name, kind in (("getattr", self.GETATTR), ("readlink", self.READLINK), ("open", self.OPEN),
+                           ("read", self.READ), ("readdir", self.READDIR)):
+            fn = kind(handlers[name])
+            keep.append(fn)
+            setattr(ops, name, fn)
+        args = [b"stupidsim-lazy", mountpoint.encode(), b"-f", b"-o", options.encode()]
+        argv = (c.c_char_p * len(args))(*args)
+        return self.lib.fuse_main_real(len(args), argv, c.byref(ops), c.sizeof(ops), None)
+
+
+class LazyRuntime:
+    """Answers the runtime's metadata from the index and serves file contents from layers/fetched, fetching a
+    file's unit from the store on its first open. Called on libfuse's threads."""
+
+    def __init__(self, runtime, uid, gid):
+        import collections
+        import threading
+        self.runtime, self.uid, self.gid = runtime, uid, gid
+        self.layers = layers_dir(runtime)
+        self.fetched = os.path.join(self.layers, "fetched")
+        self.index_path = os.path.join(self.layers, "index.sqlite")
+        self.local = threading.local()
+        self.fds, self.fds_lock = {}, threading.Lock()
+        self.unit_locks = collections.defaultdict(threading.Lock)
+        self.units_lock = threading.Lock()
+        self.log_lock = threading.Lock()
+        self.fetched_units = set()
+        # STUPIDSIM_LAZY_STATS=1: every 30 s, log how many calls of each kind the server answered and their time
+        self.stats = {} if os.environ.get("STUPIDSIM_LAZY_STATS") else None
+
+    def db(self):
+        import sqlite3
+        if not hasattr(self.local, "db"):
+            self.local.db = sqlite3.connect(f"file:{self.index_path}?mode=ro", uri=True, check_same_thread=False)
+        return self.local.db
+
+    def note(self, message):
+        with self.log_lock:
+            print(f"{time.strftime('%H:%M:%S')} {message}", flush=True)
+
+    def entry(self, path):
+        rel = path.decode().lstrip("/")
+        if not rel:
+            return ("d", 0o755, 0, 0, None, None)
+        parent, name = os.path.split(rel)
+        return self.db().execute("SELECT kind, mode, size, mtime_ns, unit, target FROM entries WHERE parent = ? AND name = ?",
+                                 (parent, name)).fetchone()
+
+    def guarded(self, fn):
+        stats = self.stats
+
+        def call(*args):
+            started = time.perf_counter()
+            try:
+                return fn(*args)
+            except OSError as error:
+                return -(error.errno or errno.EIO)
+            except Exception as error:  # an exception must not cross into C; report it and fail the call
+                self.note(f"FAILED {fn.__name__} {args[0]!r}: {error!r}")
+                return -errno.EIO
+            finally:
+                if stats is not None:
+                    entry = stats.setdefault(fn.__name__, [0, 0.0])
+                    entry[0] += 1
+                    entry[1] += time.perf_counter() - started
+        call.__name__ = fn.__name__
+        return call
+
+    def getattr(self, path, st, _fi):
+        e = self.entry(path)
+        if not e:
+            return -errno.ENOENT
+        kind, mode, size, mtime_ns, _, target = e
+        s = st.contents
+        self.c.memset(st, 0, self.c.sizeof(s))
+        s.st_mode = mode | {"d": stat.S_IFDIR, "f": stat.S_IFREG, "l": stat.S_IFLNK}[kind]
+        s.st_nlink = 2 if kind == "d" else 1
+        s.st_uid, s.st_gid = self.uid, self.gid
+        s.st_size = len(target.encode()) if kind == "l" else size
+        s.st_blksize = 4096
+        s.st_blocks = (s.st_size + 511) // 512
+        for t in (s.st_atim, s.st_mtim, s.st_ctim):
+            t.tv_sec, t.tv_nsec = divmod(mtime_ns, 10**9)
+        return 0
+
+    def readlink(self, path, buf, size):
+        e = self.entry(path)
+        if not e:
+            return -errno.ENOENT
+        if e[0] != "l":
+            return -errno.EINVAL
+        data = e[5].encode()[:size - 1] + b"\0"
+        self.c.memmove(buf, data, len(data))
+        return 0
+
+    def readdir(self, path, buf, filler, _offset, _fi, _flags):
+        rel = path.decode().lstrip("/")
+        e = self.entry(path)
+        if not e:
+            return -errno.ENOENT
+        if e[0] != "d":
+            return -errno.ENOTDIR
+        for name in (".", ".."):
+            filler(buf, name.encode(), None, 0, 0)
+        for (name,) in self.db().execute("SELECT name FROM entries WHERE parent = ?", (rel,)):
+            if filler(buf, name.encode(), None, 0, 0):
+                break
+        return 0
+
+    def open(self, path, _fi):
+        e = self.entry(path)
+        if not e:
+            return -errno.ENOENT
+        if e[0] != "f":
+            return -errno.EISDIR if e[0] == "d" else -errno.ELOOP
+        rel = path.decode().lstrip("/")
+        local = os.path.join(self.fetched, rel)
+        if not os.path.exists(local):
+            self.fetch(e[4], rel)
+        if os.path.getsize(local) != e[2]:
+            self.note(f"FAILED {rel}: fetched {os.path.getsize(local)} bytes, the index says {e[2]}")
+            return -errno.EIO
+        return 0
+
+    def read(self, path, buf, size, offset, _fi):
+        rel = path.decode().lstrip("/")
+        with self.fds_lock:
+            fd = self.fds.get(rel)
+            if fd is None:
+                fd = self.fds[rel] = os.open(os.path.join(self.fetched, rel), os.O_RDONLY | os.O_CLOEXEC)
+        data = os.pread(fd, size, offset)
+        self.c.memmove(buf, data, len(data))
+        return len(data)
+
+    def fetch(self, unit, wanted):
+        """Fetches one unit into layers/fetched. Fails loudly: the open fails with EIO and the reason is logged."""
+        with self.unit_locks[unit]:
+            if unit in self.fetched_units and os.path.exists(os.path.join(self.fetched, wanted)):
+                return
+            blob, offset, length, files, size, key = self.db().execute(
+                "SELECT blob, offset, length, files, size, key FROM units WHERE id = ?", (unit,)).fetchone()
+            started = time.time()
+            scratch = tempfile.mkdtemp(dir=os.path.join(self.layers, "fetching"))
+            try:
+                command = read_command(f"runtimes/{self.runtime}/lazy/{blob}")
+                command = command[:-1] + ["-r", f"{offset}-{offset + length - 1}", command[-1]]
+                curl = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                unpack = subprocess.run(f"zstd -dcq | tar -x --no-same-owner -C '{scratch}'", shell=True, stdin=curl.stdout,
+                                        stderr=subprocess.PIPE)
+                curl.stdout.close()
+                curl_error = curl.stderr.read().decode().strip()
+                if curl.wait() != 0 or unpack.returncode != 0:
+                    raise OSError(errno.EIO, f"curl {curl.returncode} {curl_error!r}, unpack {unpack.returncode} "
+                                             f"{unpack.stderr.decode().strip()!r}")
+                count = 0
+                for directory, _, names in os.walk(scratch):
+                    for name in names:
+                        source = os.path.join(directory, name)
+                        target = os.path.join(self.fetched, os.path.relpath(source, scratch))
+                        os.makedirs(os.path.dirname(target), exist_ok=True)
+                        os.replace(source, target)
+                        count += 1
+                if count != files:
+                    raise OSError(errno.EIO, f"the unit unpacked to {count} files, the index lists {files}")
+            except OSError as error:
+                self.note(f"FAILED fetching {key} (unit {unit}, {blob} {offset}+{length}) for {wanted}: {error.strerror or error}")
+                raise OSError(errno.EIO, "fetch failed")
+            finally:
+                shutil.rmtree(scratch, ignore_errors=True)
+            self.fetched_units.add(unit)
+            self.note(f"fetched {key or '/'}: {files} files, {size / 1e6:.1f} MB ({length / 1e6:.1f} MB compressed) "
+                      f"in {time.time() - started:.2f} s, for {wanted}")
+
+
+def lazy_serve(runtime, uid, gid):
+    """The FUSE server at layers/lazy, run in the foreground (mount starts it in the background)."""
+    import ctypes
+    import resource
+    fuse = FuseBinding()
+    fs = LazyRuntime(runtime, uid, gid)
+    fs.c = ctypes
+    os.makedirs(fs.fetched, exist_ok=True)
+    shutil.rmtree(os.path.join(fs.layers, "fetching"), ignore_errors=True)
+    os.makedirs(os.path.join(fs.layers, "fetching"))
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
+    fs.note(f"serving {runtime} at {os.path.join(fs.layers, 'lazy')}")
+    if fs.stats is not None:
+        import threading
+
+        def report():
+            while True:
+                time.sleep(30)
+                fs.note("stats " + ", ".join(f"{k} {n} in {t:.1f} s" for k, (n, t) in sorted(fs.stats.items())))
+        threading.Thread(target=report, daemon=True).start()
+    handlers = {name: fs.guarded(getattr(fs, name)) for name in ("getattr", "readlink", "open", "read", "readdir")}
+    # The runtime never changes, so the kernel may keep names, attributes, missing names and pages for good.
+    options = ("ro,allow_other,default_permissions,kernel_cache,entry_timeout=86400,attr_timeout=86400,"
+               "negative_timeout=86400,fsname=stupidsim-lazy,subtype=stupidsim")
+    status = fuse.main(os.path.join(fs.layers, "lazy"), options, handlers)
+    fs.note(f"stopped ({status})")
+    sys.exit(status)
+
+
+def lazy_paths(runtime):
+    layers = layers_dir(runtime)
+    return {n: os.path.join(layers, n) for n in ("local", "lazy", "upper", "work")} | {
+        "extracted": os.path.join(runtime_dir(runtime), "extracted"), "log": os.path.join(layers, "lazy.log")}
+
+
+def darling_running():
+    """x86Sim's Darling copies the mount table when its server starts; a mount made after that is not visible inside."""
+    return subprocess.run(["pgrep", "-u", str(os.getuid()), "-x", "darlingserver"], stdout=subprocess.DEVNULL).returncode == 0
+
+
+def mount_lazy(runtime):
+    p = lazy_paths(runtime)
+    if os.path.ismount(p["extracted"]):
+        return
+    if os.geteuid() != 0:
+        fail(f"mounting the lazy runtime at {p['extracted']} needs root (an overlay and a FUSE file system); "
+             f"run: sudo stupidsim-linux mount")
+    if darling_running():
+        fail("x86Sim's darlingserver is already running, so it would not see the runtime mounted now; "
+             "shut the device down (stupidsim-linux shutdown) and try again")
+    if not os.path.exists(os.path.join(layers_dir(runtime), "index.sqlite")):
+        fail(f"{layers_dir(runtime)} has no index.sqlite; run stupidsim-linux setup again")
+    for name in ("lazy", "upper", "work", "extracted"):
+        os.makedirs(p[name], exist_ok=True)
+    if not os.path.ismount(p["lazy"]):
+        owner = os.stat(p["local"])
+        with open(p["log"], "a") as log_file:
+            subprocess.Popen([sys.executable, os.path.realpath(__file__), "lazy-serve", runtime,
+                              "--uid", str(owner.st_uid), "--gid", str(owner.st_gid)],
+                             stdin=subprocess.DEVNULL, stdout=log_file, stderr=subprocess.STDOUT, start_new_session=True)
+        for _ in range(100):
+            if os.path.ismount(p["lazy"]):
+                break
+            time.sleep(0.1)
+        else:
+            fail(f"the lazy file system did not come up at {p['lazy']}; see {p['log']}")
+    subprocess.run(["mount", "-t", "overlay", "stupidsim-runtime", "-o",
+                    f"lowerdir={p['local']}:{p['lazy']},upperdir={p['upper']},workdir={p['work']}", p["extracted"]], check=True)
+    log(f"mounted the lazy runtime at {p['extracted']} (fetches are logged in {p['log']})")
+
+
+def unmount_lazy(runtime):
+    p = lazy_paths(runtime)
+    for name in ("extracted", "lazy"):
+        if os.path.ismount(p[name]):
+            subprocess.run(["umount", p[name]], check=True)
+            log(f"unmounted {p[name]}")
+
+
 def store_publish():
     out_root = os.environ.get("STUPIDSIM_STORE_DIR") or fail("STUPIDSIM_STORE_DIR is not set")
     keys = []
@@ -561,13 +1045,23 @@ def setup(apps, name, no_boot, metal, runtime=None, features="lean"):
     jobs = []
     marker = os.path.join(rdir, ".stupidsim-parts")
     have = set(open(marker).read().split()) if os.path.exists(marker) else set()
-    parts = ["skeleton", "base"] + list(apps)
+    parts = ["skeleton", "base", "metadata", "index"] + list(apps)
+    # The fetched parts are the overlay's top layer (layers/local); the rest of the runtime is fetched on first use.
+    extracted, local = os.path.join(rdir, "extracted"), os.path.join(layers_dir(runtime), "local")
+    if os.path.isdir(extracted) and not os.path.ismount(extracted) and os.listdir(extracted):
+        fail(f"{extracted} holds a runtime set up before runtimes were fetched on demand; remove {rdir} and set up again")
+    if os.path.ismount(extracted) and set(parts) - have:
+        fail(f"the runtime is mounted, and its layers cannot change while it is; shut the device down, run "
+             f"stupidsim-linux unmount, and set up again")
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
         for part in parts:
             if part in have:
                 continue
+            if part == "index":
+                jobs.append(pool.submit(fetch_file, f"{base}/lazy/index.sqlite.zst", os.path.join(layers_dir(runtime), "index.sqlite")))
+                continue
             key = f"{base}/skeleton.tar.zst" if part == "skeleton" else f"{base}/packs/{part}.tar.zst"
-            jobs.append(pool.submit(fetch_and_extract, key, os.path.join(rdir, "extracted")))
+            jobs.append(pool.submit(fetch_and_extract, key, local))
         if not os.path.isdir(os.path.join(x86sim_cache(), f"jc-{runtime.split('-')[2]}")):
             jobs.append(pool.submit(fetch_and_extract, f"{base}/warm/jitcache.tar.zst", x86sim_cache()))
         fresh_device = not os.path.isdir(device)
@@ -581,7 +1075,9 @@ def setup(apps, name, no_boot, metal, runtime=None, features="lean"):
     check_owned(os.path.join(x86sim_cache(), f"jc-{runtime.split('-')[2]}"))
     link = os.path.join(rdir, "RuntimeRoot")
     if not os.path.islink(link):
-        os.symlink(os.path.relpath(runtime_root_unchecked(rdir), rdir), link)
+        # Into the mount point; the path inside is the same in layers/local, where the skeleton is.
+        os.symlink(os.path.join("extracted", os.path.relpath(runtime_root_unchecked(local), local)), link)
+    os.makedirs(extracted, exist_ok=True)
 
     if fresh_device:
         template = json.loads(object_text(f"{base}/warm/device.json"))
@@ -602,8 +1098,8 @@ def setup(apps, name, no_boot, metal, runtime=None, features="lean"):
         log(f"ready: device {name}, UDID {udid}, {time.time() - started:.0f} s after setup started")
 
 
-def runtime_root_unchecked(rdir):
-    runtimes = os.path.join(rdir, "extracted", RUNTIME_ROOT_PREFIX)
+def runtime_root_unchecked(top):
+    runtimes = os.path.join(top, RUNTIME_ROOT_PREFIX)
     for name in sorted(os.listdir(runtimes)):
         candidate = os.path.join(runtimes, name, "Contents/Resources/RuntimeRoot")
         if os.path.isdir(candidate):
@@ -631,13 +1127,20 @@ def main():
     p.add_argument("--metal", choices=["auto", "gpu", "lavapipe", "software"], default="auto")
     p = commands.add_parser("shutdown")
     p.add_argument("--device", default=DEFAULT_DEVICE)
+    for command in ("mount", "unmount"):
+        p = commands.add_parser(command)
+        p.add_argument("--device", default=DEFAULT_DEVICE)
+    p = commands.add_parser("lazy-serve", help=argparse.SUPPRESS)
+    p.add_argument("runtime")
+    p.add_argument("--uid", type=int, default=os.getuid())
+    p.add_argument("--gid", type=int, default=os.getgid())
     p = commands.add_parser("trace")
     p.add_argument("phase", choices=["begin", "end"])
     p.add_argument("name", nargs="?")
     p.add_argument("--device", default=DEFAULT_DEVICE)
     p.add_argument("--base", help="leave out the files of this manifest (normally base)")
     p = commands.add_parser("store")
-    p.add_argument("action", choices=["build", "publish", "presign"])
+    p.add_argument("action", choices=["build", "lazy", "publish", "presign"])
     p.add_argument("key", nargs="?")
     p.add_argument("--device", default=DEFAULT_DEVICE)
     p.add_argument("--manifest", action="append", default=[])
@@ -650,6 +1153,13 @@ def main():
         boot(a.device, a.metal)
     elif a.command == "shutdown":
         shutdown(a.device)
+    elif a.command in ("mount", "unmount"):
+        runtime = device_runtime(device_dir(a.device))
+        if not is_lazy(runtime):
+            fail(f"{runtime} is not set up to be fetched on demand (no {layers_dir(runtime)})")
+        (mount_lazy if a.command == "mount" else unmount_lazy)(runtime)
+    elif a.command == "lazy-serve":
+        lazy_serve(a.runtime, a.uid, a.gid)
     elif a.command == "trace":
         if a.phase == "begin":
             trace_begin(a.device)
@@ -659,6 +1169,8 @@ def main():
             trace_end(a.name, a.device, a.base)
     elif a.action == "build":
         store_build(a.device, a.manifest or ["base"])
+    elif a.action == "lazy":
+        store_lazy(a.device)
     elif a.action == "publish":
         store_publish()
     else:

@@ -1,10 +1,10 @@
 # Recording an app's runtime manifest
 
-On Linux an agent's machine gets only part of the iOS runtime: the base every session needs, plus
-what each app it tests needs. An app's part is a manifest, a list of runtime files, recorded by
-using the app on a machine that has the whole runtime and noting which files it read. An app
-whose manifest is missing a file it needs does not fail politely: on a runtime missing the files
-an app reads, the app never launches. So record the flows the agent will test, and record again
+On Linux an agent's machine fetches the base every session needs up front. It fetches every other
+runtime file the first time something opens it, so an app runs without a manifest. A manifest is
+optional: a list of runtime files, recorded by using the app on a machine that has the whole
+runtime and noting which files it read. Setup then fetches those files up front as a pack, which
+spares the app's first launch the fetches. Record the flows the agent will test, and record again
 when the app starts using a new framework (maps, web views, the camera, Health, a share sheet).
 
 ## Steps

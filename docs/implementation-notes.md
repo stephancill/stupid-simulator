@@ -3,6 +3,92 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## Fetching runtime files on first use (`stupidsim-linux`, lazy runtime)
+
+A machine set up from the store used to get only the runtime files that traces recorded. An app
+that needed anything else installed, but never came to the front and logged nothing useful.
+Safari, Maps and the other system apps never opened. Now the rest of the runtime is fetched
+the first time something opens it, so any app runs without a recorded manifest.
+
+- **The runtime is an overlay of two layers, mounted at `extracted/` before boot.**
+  - On top is `layers/local`: the skeleton and the packs setup fetched (base, the bundle metadata
+    pack, any `--app`).
+  - Below it is a FUSE file system (`layers/lazy`, `stupidsim-linux lazy-serve`). It answers
+    every entry of the whole runtime from an index, and fetches a file's unit into
+    `layers/fetched` on its first open.
+  - x86Sim's own writes into the runtime (its per-device LaunchAngels directory, the extracted
+    `Metal.framework/Metal`) land in `layers/upper`.
+  - Files on the top layer never reach FUSE, so the dyld shared cache and everything traced are
+    read at kernel speed.
+  - Mounting needs root (overlayfs and FUSE). `boot` mounts, or fails naming the command.
+- **Darling sees the mount only if it exists before `darlingserver` starts.** x86Sim's Darling
+  runs in its own user and mount namespaces, made by copying the host's mount table when its
+  server starts (checked through `/proc/<darlingserver>/mountinfo` on the WSL 2 kernel
+  6.18.58.1). The guest reaches the runtime through `/Volumes/SystemRoot/<host path>`, which is
+  that copied table. So `mount` refuses while a `darlingserver` of the same user is running.
+- **The FUSE server is Python's standard library over libfuse 3's high-level API through
+  ctypes.** That keeps `stupidsim-linux` a single script with no packages. The struct layouts are
+  libfuse 3.14's (Ubuntu 24.04), for x86_64.
+  - It is read-only, with `kernel_cache` and day-long entry, attribute and negative timeouts,
+    since a runtime never changes.
+  - Metadata comes from a SQLite index (`(parent, name)` primary key, so a lookup and a directory
+    listing are one indexed query), opened read-only per libfuse thread.
+  - During a boot with nothing to fetch it answered 950 `getattr` calls in 0.1 s in total, and
+    served no reads (measured with `STUPIDSIM_LAZY_STATS=1`, which logs counts and time per call
+    kind every 30 s).
+- **Store layout: range-readable blobs** under `runtimes/<runtime>/lazy/`.
+  - A unit is the files of the innermost bundle a file is in, or of its directory outside
+    bundles. Each `.lproj` is its own unit, so unused languages are never fetched.
+  - Units are taken in path order and split at 32 MB uncompressed. Each one is a zstd-compressed
+    tar, and zstd's frame checksum makes a damaged range fail to unpack.
+  - Units are appended into blobs of at most 4 GiB, since R2 takes at most 5 GiB in one PUT.
+  - The index (`index.sqlite.zst`) records each unit's blob, offset and length. One fetch is one
+    HTTP range GET piped through `zstd -d | tar -x`, the same tools setup already needs.
+  - Built by `store lazy` from a machine with the whole runtime. On iOS 27.2 (24B8117):
+    819,952 entries, 588,200 files in 214,058 units, 2 blobs, 8.30 GB, a 9.8 MB index, in
+    14 minutes on 20 cores.
+- **Failing loudly.** A unit that cannot be fetched fails the open with EIO, and
+  `layers/lazy.log` names the unit, the byte range and curl's or tar's error. A unit that
+  unpacks to a different number of files than the index lists also fails, as does a file whose
+  size differs from the index. Every fetch is logged with its size and time.
+- **Bundle metadata is prefetched as its own pack (`packs/metadata.tar.zst`).**
+  - On a new machine's first boot, LaunchServices registers every bundle again. The device
+    template's database names the template's path, so it is not reused. Registration reads each
+    bundle's `Info.plist` and its `InfoPlist.strings` in every language.
+  - With only the FUSE layer below, that first boot fetched 26,642 units one by one (25,656 of
+    them for an `InfoPlist.strings`), 0.4 GB compressed and 6 minutes from a local disk.
+  - `store lazy` therefore also writes every bundle's metadata as a pack, fetched with the base:
+    `Info.plist`, `InfoPlist*` strings and loctables, intent definitions, App Intents metadata
+    and `version.json`. That is 79,399 files, 46 MB, 6 MB compressed.
+  - With it, the same first boot fetched 691 units, taking 9.3 s of fetching in all.
+- **Verified on the WSL 2 box, as root in an empty home directory, from a store directory on
+  the same disk** (`STUPIDSIM_LOCAL_STORE`, read through curl's `file://`, which honours ranges):
+  - setup took 163 s;
+  - the device booted to the home screen;
+  - a SwiftUI test app with SwiftData and two package dependencies was installed with **no
+    manifest fetched**. It came to the front with its demo data, `tap --label Settings
+    --verify` opened its settings, and 34 units were fetched for it;
+  - Safari launched and showed its start page, which it never did on a runtime pruned to a
+    trace;
+  - nothing failed to fetch.
+- **Boot is slower, because the whole system is now there.** On the same box (20 cores):
+  - the pruned runtime booted in 91 s (measured earlier);
+  - the lazy runtime took 333 s on its first boot and 257–267 s on later boots, with nothing
+    fetched;
+  - a device on the whole unmounted runtime took 211–261 s.
+
+  So the mount itself costs little. With every launchd plist present, launchd runs 329 daemons
+  where the pruned runtime had the 96 that were traced, and LaunchServices registers every app
+  and extension.
+  - Hiding the 233 untraced daemons and 9 agents (overlay whiteouts) brought boot to
+    189–203 s.
+  - But the installed test app was then missing from the app library
+    (`FBSApplicationLibrary returned nil`).
+  - Hiding parts of the system silently breaks things, so the runtime ships whole.
+- Machines set up before this change keep the old layout (`extracted/` a plain directory);
+  setup refuses such a runtime and asks for it to be removed. `cloud-setup.sh` installs
+  `fuse3`.
+
 ## Fast setup on throwaway Linux machines (`stupidsim-linux`)
 
 A machine with nothing on it took about 20 minutes and 36 GB to get to a booted x86Sim device:
@@ -24,10 +110,10 @@ there at all. `linux/stupidsim-linux` (Python's standard library, curl, tar and 
   - On iOS 27.2 (24B8117) the base was 6,158 of 588,147 files, 5.4 GB, 1.78 GB compressed. It
     covers booting, SpringBoard, the in-device helper, Settings, Spotlight typing, the
     pasteboard, an app install, a notification and rotation, and is mostly the dyld shared cache.
-  - StupidSocial added 111 files, 0.14 GB.
+  - A SwiftUI test app with SwiftData and two package dependencies added 111 files, 0.14 GB.
 - **A runtime pruned to a trace boots and runs what was traced, and nothing else.** Built from
   hard links to just the files one session read (5.1 GB, 1.8 GB compressed), it cold-booted in the
-  same 3 minutes, and StupidSocial, the test host, the SpringBoard tree and the pasteboard all
+  same 3 minutes, and the test app, the test host, the SpringBoard tree and the pasteboard all
   worked. Safari, Photos, Calendar, Messages, Files and Maps, which the trace never opened, did not
   launch at all within 25 s; on the whole runtime they opened. An app therefore needs its own
   manifest (`docs/runbooks/app-manifest.md`).
@@ -72,7 +158,7 @@ there at all. `linux/stupidsim-linux` (Python's standard library, curl, tar and 
   - setup 202 s (installing stupidsim 2 s, x86Sim 40 s, the parts in parallel, the 1.78 GB base
     last at 198 s);
   - boot 91 s;
-  - installing StupidSocial 37 s.
+  - installing the test app 37 s.
 
   Then `doctor`, the trees, `tap --label Settings --verify`, `wait` and `screenshot` worked.
 - **x86Sim's frame ring is found through sim.env.** The `/dev/shm/x86sim-a64-<name>-simfb.ring`
@@ -104,9 +190,9 @@ there at all. `linux/stupidsim-linux` (Python's standard library, curl, tar and 
   the ring unreadable. When the directory cannot be created (no root, no logind), `boot` fails and
   names the command that fixes it.
 - With both fixes, a fresh Claude Code cloud session (4 vCPU, 16 GB, no swap) with
-  `STUPIDSIM_APPS=stupidsocial` set up in 87 s and booted to the home screen in 105 s. StupidSocial
-  installed, launched with `-demoData` and showed its tree in 18 s; `tap --label Settings --verify`
-  (3 s), `wait --label "Add Account"` and screenshots worked, with 4.2 GB in use. Settings opened in
+  the test app's manifest set up in 87 s and booted to the home screen in 105 s. The test app
+  installed, launched with demo data and showed its tree in 18 s; `tap --label Settings --verify`
+  (3 s), `wait --label <a label in the app>` and screenshots worked, with 4.2 GB in use. Settings opened in
   6 s. Without the app's manifest (`STUPIDSIM_APPS` unset) the install still succeeds, but the app
   never comes to the front and leaves no crash report.
 - Also measured in the cloud VM: no systemd user manager (so x86Sim's `X86SIM_MEM_MAX` is not
@@ -156,7 +242,7 @@ Ubuntu 24.04 under WSL 2, built with Swift 6.2.4.
     AXRuntime logs that it must be the system shell and answers nothing. `--springboard` reads
     `+defaultSystemShellApplication`.
   - The tree is the app's `explorerElements`, the flat list VoiceOver visits, which is what
-    AXPTranslator presents on a Mac. On StupidSocial's feed every element the Mac tree has came back
+    AXPTranslator presents on a Mac. On a SwiftUI test app's feed every element the Mac tree has came back
     with the same label and exactly the same frame. The Mac folds the navigation bar into one
     `Group`, hiding its Search and Settings buttons; the guest lists both, so `tap --label Settings`
     finds them on Linux.
@@ -164,7 +250,7 @@ Ubuntu 24.04 under WSL 2, built with Swift 6.2.4.
     `axIdentifier`. `-value` answers nil where an element has one ("2 apps" on a home screen
     folder); the value is AXRuntime attribute 2006, read through `-[AXUIElement
     objectWithAXAttribute:]`.
-  - Roles come from UIAccessibilityTraits, matched against the Mac translator on StupidSocial, the
+  - Roles come from UIAccessibilityTraits, matched against the Mac translator on a SwiftUI test app, the
     Settings app and the home screen: button, link, image, static text, header (Heading),
     adjustable (Slider), search field and text entry (bits 10 and 18, TextField), and bit 22, a home
     screen icon, which the Mac calls a Button.
@@ -275,7 +361,7 @@ Ubuntu 24.04 under WSL 2, built with Swift 6.2.4.
   Extension" after a `mutable-content` push, `--expect "Serviced: ..."` passed, a push without
   `mutable-content` and one with `--skip-service-extension` showed the payload as sent, the
   `Simulator Target Bundle` key worked, and a third-party app's extension ran (it passes unencrypted
-  payloads through unchanged). A tester then ran Stupid Social's extension on real Web Push
+  payloads through unchanged). A tester then ran a messaging app's extension on real Web Push
   ciphertext encrypted to a seeded registration: the decrypted sender, room and message reached the
   banner, it reported a Communication Notification, reply and open worked on the serviced banner, and
   an undecryptable payload showed the extension's fallback. With the helper cached a push with `--verify` took 1.7 s; the first
