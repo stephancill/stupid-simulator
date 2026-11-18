@@ -123,6 +123,7 @@ because file paths and sizes change between iOS versions.
 stupidsim-linux shutdown --device agent
 export STUPIDSIM_STORE_DIR=~/store && rm -rf ~/store
 stupidsim-linux store build --device agent --manifest base --manifest <app> ...
+stupidsim-linux store lazy --device agent     # every file as range-readable blobs, ~15 min
 set -a; . ~/.config-store-writer.env; set +a
 stupidsim-linux store publish
 ```
@@ -134,6 +135,10 @@ stupidsim-linux store publish
 - the translation cache;
 - the template device and its original path;
 - `current.json`.
+
+`store lazy` writes `lazy/` (the index and the blobs every other runtime file is fetched from on
+first use) and `packs/metadata.tar.zst` (every bundle's Info.plist and InfoPlist strings, which a
+new machine's first boot reads for all of them). Setup refuses a runtime without them.
 
 `publish` uploads `current.json` last, so sessions keep fetching the previous runtime until
 everything is in place. To make the new runtime available without making it the default, delete

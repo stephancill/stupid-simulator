@@ -6,13 +6,14 @@
 # (Claude Code's setup cache) keeps files but not running processes.
 #
 #   curl -fsSL https://raw.githubusercontent.com/stephancill/stupid-simulator/main/linux/cloud-setup.sh \
-#     | STUPIDSIM_APPS="stupidsocial" bash
+#     | bash
 #
 # Then, at the start of each session:   stupidsim-linux boot
 #
-# STUPIDSIM_APPS names the app manifests to fetch besides the base (space separated); an app the
-# store has no manifest for installs but never comes to the front. See
-# docs/runbooks/app-manifest.md for recording one. Prints the time each step took.
+# STUPIDSIM_APPS names the app manifests to fetch ahead of time besides the base (space
+# separated). Any other runtime file is fetched from the store the first time something opens it,
+# so an app without a manifest runs too, a little slower the first time. Booting mounts the
+# runtime, which needs root. Prints the time each step took.
 #
 # The store is read anonymously from STUPIDSIM_PUBLIC_STORE (default below), or through R2's S3
 # endpoint where that host is blocked. STUPIDSIM_STORE_URLS
@@ -59,6 +60,9 @@ packages=()
 command -v zstd >/dev/null || packages+=(zstd)
 # x86Sim's network helper reads the default route with `ip`; without it the helper crashed at boot
 command -v ip >/dev/null || packages+=(iproute2)
+# libfuse 3: the runtime files outside the fetched packs are served by a FUSE file system that
+# fetches each on first use (stupidsim-linux lazy-serve)
+ldconfig -p 2>/dev/null | grep -q 'libfuse3\.so\.3' || packages+=(fuse3)
 [ -e /usr/share/vulkan/icd.d/lvp_icd.json ] || packages+=(mesa-vulkan-drivers)
 if [ ${#packages[@]} -gt 0 ] && [ "$(id -u)" = 0 ] && command -v apt-get >/dev/null; then
   if apt-get update -qq >/dev/null && apt-get install -y -qq "${packages[@]}" >/dev/null; then

@@ -42,13 +42,15 @@ there reports x86Sim, the in-device helper and each device's frames. Differences
 
 ### A throwaway Linux machine (Claude Code cloud session, CI)
 
-No Mac, Xcode or credentials needed: a public store holds just the runtime files tests read, a warm
-translation cache and a device that has booted once. Verified in a Claude Code cloud session
+No Mac, Xcode or credentials needed: a public store holds the runtime files a boot reads, a warm
+translation cache and a device that has booted once. Any other runtime file is fetched the first
+time something opens it, so any app runs, and so do the system apps. Booting mounts the runtime,
+which needs root. Verified in a Claude Code cloud session
 (4 vCPU, 16 GB): setup 90 s, boot 105 s, an app on screen 18 s after launch, 4.2 GB in use.
 
 ```bash
 # once (ideally in the environment's setup script, so its snapshot keeps it); as root or a user
-curl -fsSL https://raw.githubusercontent.com/stephancill/stupid-simulator/main/linux/cloud-setup.sh | STUPIDSIM_APPS="stupidsocial" bash
+curl -fsSL https://raw.githubusercontent.com/stephancill/stupid-simulator/main/linux/cloud-setup.sh | bash
 # each session: boot and wait for the home screen (about 2 minutes; run it in the background and
 # poll for its "booted in" line, since tool calls may time out)
 stupidsim-linux boot
@@ -65,11 +67,12 @@ stupidsim ui-tree booted --labelled      # then the usual loop
   builds, installs and launches it here, failing with the app's output if it never reaches the
   front (an edit-and-run cycle takes seconds). Let a freshly built app settle a few seconds
   before relying on gestures: its first run is translated live.
-- `STUPIDSIM_APPS` names the apps whose runtime files to fetch besides the base. **An app with no
-  manifest in the store installs fine but never comes to the front, with no crash report.** If
-  Settings opens and your app does not, that is the cause: record one
-  (docs/runbooks/app-manifest.md in the repository). For a quick check that the device works, open
-  Settings: `$A x86sim launch com.apple.Preferences`.
+- An app's first launch fetches the runtime files it needs that are not on the machine yet. Each
+  fetch is a line in `~/.local/share/x86sim/runtimes/<runtime>/layers/lazy.log`. A file that could
+  not be fetched fails to open, and is logged there with `FAILED`: look there first if an app does
+  not come to the front. `STUPIDSIM_APPS` optionally names apps whose recorded runtime files to
+  fetch up front. For a quick check that the device works, open Settings:
+  `$A x86sim launch com.apple.Preferences`.
 - `stupidsim wait --label "<app name>"` also matches the home screen icon of that name; wait for
   something inside the app instead.
 - The first launch of an app is slower (its code is translated as it runs); later launches are
