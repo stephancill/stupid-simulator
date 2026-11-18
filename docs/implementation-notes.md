@@ -71,20 +71,28 @@ the first time something opens it, so any app runs without a recorded manifest.
   - Safari launched and showed its start page, which it never did on a runtime pruned to a
     trace;
   - nothing failed to fetch.
-- **Boot is slower, because the whole system is now there.** On the same box (20 cores):
-  - the pruned runtime booted in 91 s (measured earlier);
-  - the lazy runtime took 333 s on its first boot and 257–267 s on later boots, with nothing
-    fetched;
-  - a device on the whole unmounted runtime took 211–261 s.
-
-  So the mount itself costs little. With every launchd plist present, launchd runs 329 daemons
-  where the pruned runtime had the 96 that were traced, and LaunchServices registers every app
-  and extension.
-  - Hiding the 233 untraced daemons and 9 agents (overlay whiteouts) brought boot to
-    189–203 s.
-  - But the installed test app was then missing from the app library
-    (`FBSApplicationLibrary returned nil`).
-  - Hiding parts of the system silently breaks things, so the runtime ships whole.
+- **Booting without `DISPLAY`.** On the WSL 2 box a boot of the lazy runtime took 193–370 s,
+  against 91 s for the pruned runtime. A device on the whole, unmounted runtime was as slow
+  (211–261 s), so the lazy runtime was not the cause.
+  - **The cause was Darling's iokitd.** At startup its main thread calls `XOpenDisplay()`
+    (`poll ← xcb_connect_to_fd ← XOpenDisplay` in gdb) before it answers any Mach message.
+    Every guest process that touches IOKit waits for it, and the rest of the boot queues behind
+    those processes. Examples: lsd's main thread, UserEventAgent's alarm plugin ("took 195.148
+    s"), securityd and backboardd, and logd's listeners.
+  - **Under WSLg nothing answers that call.** Its X server crash-loops (weston, a segfault in
+    `rdp-backend.so` every ~102 s), and its X0 socket accepts and never replies. Then Xlib's TCP
+    fallback to `127.0.0.1:6000` hangs about 135 s, because mirrored networking drops connections
+    to closed loopback ports instead of refusing them.
+  - **The ~33 s silences in launchd's log were not timeouts.** x86Sim's jetsam.py was killing
+    daemons idle for 30 s while everything waited.
+  - **`boot` now runs x86Sim without `DISPLAY`.** The screen comes from simfb, not X. On the
+    same box, a fresh setup's first boot now takes 238 s (691 units fetched from the local disk)
+    and a later boot 109 s.
+  - Cloud sessions have no `DISPLAY`, so they never waited for this.
+  - The real fix belongs in x86Sim: iokitd should not connect to X there.
+  - Hiding the untraced launchd plists (overlay whiteouts) was tried along the way and is not
+    needed. The installed test app that seemed to vanish then had in fact not been installed
+    since a fresh setup.
 - **Verified in a fresh Claude Code cloud session** (4 vCPU, 16 GB, store read through R2's S3
   endpoint). It used `STUPIDSIM_LINUX` (`cloud-setup.sh` installs that file instead of the packaged
   `stupidsim-linux`, for testing a branch).

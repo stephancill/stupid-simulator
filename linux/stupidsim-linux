@@ -120,11 +120,13 @@ def device_dir(name):
     return os.path.join(x86sim_data(), "var", "device-a64" if name in ("", "default") else f"device-a64-{name}")
 
 
-def run_x86sim(args, device=None, env=None, check=True, capture=False):
+def run_x86sim(args, device=None, env=None, check=True, capture=False, unset=()):
     environment = dict(os.environ, SHELL="/bin/bash")
     if device:
         environment.update(X86SIM_DEVICE=device, A64_DEVICE=device)
     environment.update(env or {})
+    for name in unset:
+        environment.pop(name, None)
     result = subprocess.run([launcher()] + args, env=environment, text=True,
                             stdout=subprocess.PIPE if capture else None, stderr=subprocess.STDOUT if capture else None)
     if check and result.returncode != 0:
@@ -240,7 +242,11 @@ def boot(name, metal="auto", timeout=900):
     if is_lazy(runtime):
         mount_lazy(runtime)
     env = dict(vulkan_env(metal), A64_KEEP="1")
-    run_x86sim(["shell", "-c", "cli/libexec/arm64/boot-a64.sh"], device=device, env=env)
+    # Without DISPLAY: Darling's iokitd opens an X display on its main thread before it answers any Mach message, and
+    # every guest process that touches IOKit waits for it. Under WSLg (its X server crash-looping, and mirrored
+    # networking dropping connections to closed loopback ports) that took 135-195 s of a 193-231 s boot; without
+    # DISPLAY the same boot took 95 s (x86Sim 0.3.0). The screen comes from simfb, not X.
+    run_x86sim(["shell", "-c", "cli/libexec/arm64/boot-a64.sh"], device=device, env=env, unset=("DISPLAY",))
     run_x86sim(["x86sim", "wait", "home", str(timeout)], device=device)
     if not is_booted(device):
         fail(f"{name} reached the home screen but its input socket does not answer")
