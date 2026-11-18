@@ -10,12 +10,15 @@ machines (cloud agent sessions, CI), and records what an app needs from the iOS 
     stupidsim-linux trace begin [--device NAME]
         Shut the device down, mark every runtime file unread, and boot it again. Then use the app.
     stupidsim-linux trace end NAME [--base base]
-        Write manifests/NAME.txt: the runtime files read since `trace begin`, less those in --base.
+        Write manifests/NAME.txt: the runtime files read since `trace begin`, less those in --base. On a machine
+        that fetches the runtime on demand, the files opened beyond its fetched packs (so it needs no whole runtime).
     stupidsim-linux mount | unmount [--device NAME]
         Mount the runtime's lazy layers (boot does it); needs root. unmount undoes it.
     stupidsim-linux store build [--device NAME] [--manifest NAME ...]
         From a machine with the whole runtime: write the store's files for this runtime to
         $STUPIDSIM_STORE_DIR (skeleton, a pack per manifest, translation cache, device template).
+    stupidsim-linux store pack --manifest NAME ... [--device NAME]
+        Only the named manifests' packs (adding an app, or a manifest recorded on another machine).
     stupidsim-linux store lazy [--device NAME]
         From a machine with the whole runtime: write every runtime file to $STUPIDSIM_STORE_DIR as
         range-readable blobs and an index, for fetching on first use.
@@ -285,10 +288,20 @@ def check_access_times_record(root):
 
 def trace_begin(name):
     device = device_dir(name)
-    root = runtime_root(device_runtime(device))
+    runtime = device_runtime(device)
     if is_booted(device):
         log(f"stopping {name}")
         shutdown(name)
+    if is_lazy(runtime):
+        # The lazy file system records every file opened through it (layers/opened.txt): remount it so the trace
+        # starts empty. Files in the fetched packs never reach it, so a trace there is what the packs lack.
+        unmount_lazy(runtime)
+        open(os.path.join(layers_dir(runtime), "opened.txt"), "w").close()
+        log(f"tracing what {name} opens beyond the fetched packs; booting {name}")
+        boot(name)
+        log("now use the app the way its tests will, then run: stupidsim-linux trace end <name>")
+        return
+    root = runtime_root(runtime)
     count = set_access_times(root, UNREAD_EPOCH)
     check_access_times_record(root)
     log(f"marked {count} runtime files unread; booting {name}")
@@ -326,7 +339,12 @@ def trace_end(trace_name, device_name, base):
     device = device_dir(device_name)
     runtime = device_runtime(device)
     root = runtime_root(runtime)
-    read = read_since_trace(root)
+    if is_lazy(runtime):
+        prefix = os.path.relpath(root, lazy_paths(runtime)["extracted"]) + "/"
+        with open(os.path.join(layers_dir(runtime), "opened.txt")) as f:
+            read = sorted({line[len(prefix):].rstrip("\n") for line in f if line.startswith(prefix)})
+    else:
+        read = read_since_trace(root)
     skip = set(read_manifest(runtime, base)) if base else set()
     paths = [p for p in read if p not in skip]
     size = sum(os.path.getsize(os.path.join(root, p)) for p in paths)
@@ -457,6 +475,31 @@ def pack(source, paths_file, out):
     log(f"{out}: {os.path.getsize(out) / 1e9:.2f} GB")
 
 
+def pack_manifest(runtime, name, out):
+    """packs/<name>.tar.zst and manifests/<name>.txt under out (runtimes/<runtime>/ of the store directory)."""
+    extracted = os.path.join(runtime_dir(runtime), "extracted")
+    root_rel = os.path.relpath(runtime_root(runtime), extracted)
+    os.makedirs(os.path.join(out, "packs"), exist_ok=True)
+    os.makedirs(os.path.join(out, "manifests"), exist_ok=True)
+    with tempfile.NamedTemporaryFile("w", delete=False) as listing:
+        listing.writelines(os.path.join(root_rel, p) + "\n" for p in read_manifest(runtime, name))
+    pack(extracted, listing.name, os.path.join(out, "packs", f"{name}.tar.zst"))
+    os.remove(listing.name)
+    shutil.copy(os.path.join(manifests_dir(), runtime, f"{name}.txt"), os.path.join(out, "manifests", f"{name}.txt"))
+
+
+def store_pack(device_name, manifests):
+    """Only the named manifests' packs, for adding to or re-recording an app without rebuilding the whole store."""
+    out_root = os.environ.get("STUPIDSIM_STORE_DIR") or fail("STUPIDSIM_STORE_DIR is not set (where to write the store's files)")
+    runtime = device_runtime(device_dir(device_name))
+    if is_lazy(runtime):
+        fail("packs are built from the whole runtime; this machine fetches it on demand")
+    if not manifests:
+        fail("store pack needs --manifest NAME")
+    for name in manifests:
+        pack_manifest(runtime, name, os.path.join(out_root, "runtimes", runtime))
+
+
 def store_build(device_name, manifests):
     out_root = os.environ.get("STUPIDSIM_STORE_DIR") or fail("STUPIDSIM_STORE_DIR is not set (where to write the store's files)")
     device = device_dir(device_name)
@@ -484,12 +527,7 @@ def store_build(device_name, manifests):
     os.remove(listing.name)
 
     for name in manifests:
-        paths = read_manifest(runtime, name)
-        with tempfile.NamedTemporaryFile("w", delete=False) as listing:
-            listing.writelines(os.path.join(root_rel, p) + "\n" for p in paths)
-        pack(extracted, listing.name, os.path.join(out, "packs", f"{name}.tar.zst"))
-        os.remove(listing.name)
-        shutil.copy(os.path.join(manifests_dir(), runtime, f"{name}.txt"), os.path.join(out, "manifests", f"{name}.txt"))
+        pack_manifest(runtime, name, out)
 
     build = runtime.split("-")[2]
     cache = os.path.join(x86sim_cache(), f"jc-{build}")
@@ -746,6 +784,8 @@ class LazyRuntime:
         self.units_lock = threading.Lock()
         self.log_lock = threading.Lock()
         self.fetched_units = set()
+        # Every file opened through this server, once each, in order: a trace (see trace_begin) that needs no whole runtime.
+        self.opened, self.opened_file = set(), open(os.path.join(self.layers, "opened.txt"), "a", buffering=1)
         # STUPIDSIM_LAZY_STATS=1: every 30 s, log how many calls of each kind the server answered and their time
         self.stats = {} if os.environ.get("STUPIDSIM_LAZY_STATS") else None
 
@@ -835,6 +875,10 @@ class LazyRuntime:
         if e[0] != "f":
             return -errno.EISDIR if e[0] == "d" else -errno.ELOOP
         rel = path.decode().lstrip("/")
+        with self.log_lock:
+            if rel not in self.opened:
+                self.opened.add(rel)
+                self.opened_file.write(rel + "\n")
         local = os.path.join(self.fetched, rel)
         if not os.path.exists(local):
             self.fetch(e[4], rel)
@@ -1140,7 +1184,7 @@ def main():
     p.add_argument("--device", default=DEFAULT_DEVICE)
     p.add_argument("--base", help="leave out the files of this manifest (normally base)")
     p = commands.add_parser("store")
-    p.add_argument("action", choices=["build", "lazy", "publish", "presign"])
+    p.add_argument("action", choices=["build", "lazy", "pack", "publish", "presign"])
     p.add_argument("key", nargs="?")
     p.add_argument("--device", default=DEFAULT_DEVICE)
     p.add_argument("--manifest", action="append", default=[])
@@ -1171,6 +1215,8 @@ def main():
         store_build(a.device, a.manifest or ["base"])
     elif a.action == "lazy":
         store_lazy(a.device)
+    elif a.action == "pack":
+        store_pack(a.device, a.manifest)
     elif a.action == "publish":
         store_publish()
     else:
