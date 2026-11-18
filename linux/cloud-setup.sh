@@ -51,6 +51,11 @@ if ! command -v stupidsim-linux >/dev/null; then
   rm -rf "${work}"
   export PATH="${prefix}/bin:${PATH}"
 fi
+# STUPIDSIM_LINUX: a stupidsim-linux to use instead of the packaged one (testing a branch's)
+if [ -n "${STUPIDSIM_LINUX:-}" ]; then
+  install -m 0755 "${STUPIDSIM_LINUX}" "$(command -v stupidsim-linux)"
+  echo "using stupidsim-linux from ${STUPIDSIM_LINUX}"
+fi
 echo "stupidsim installed ($(( $(date +%s) - started )) s)"
 
 # zstd unpacks the store's parts. lavapipe (Vulkan on the CPU) draws Metal when there is no GPU;
