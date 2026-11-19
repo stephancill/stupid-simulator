@@ -51,6 +51,14 @@ the first time something opens it, so any app runs without a recorded manifest.
   `layers/lazy.log` names the unit, the byte range and curl's or tar's error. A unit that
   unpacks to a different number of files than the index lists also fails, as does a file whose
   size differs from the index. Every fetch is logged with its size and time.
+- **The base includes what a new machine's first boot opens.** Traced on a lazy machine
+  (`layers/opened.txt` after a fresh setup's first boot), it adds 698 files (257 MB) to the 6,158
+  of the earlier base: the pack went from 1.78 GB to 1.87 GB.
+  - With it, a fresh setup's first boot on the WSL 2 box fetched nothing and took 178 s (238 s
+    before).
+  - Afterwards the test app, installed with no manifest, came to the front 41 s after launch,
+    and its settings opened with `tap --verify`. Safari took 26 s. That was 49 units in all, and
+    none failed.
 - **Bundle metadata is prefetched as its own pack (`packs/metadata.tar.zst`).**
   - On a new machine's first boot, LaunchServices registers every bundle again. The device
     template's database names the template's path, so it is not reused. Registration reads each

@@ -136,6 +136,13 @@ stupidsim-linux store publish
 - the template device and its original path;
 - `current.json`.
 
+Then fold what a new machine's first boot opens into the base. Publish the store as above, then
+run a fresh setup and boot on another machine or user (step 7). Trace that first boot: it is
+the first boot of that device, so `layers/opened.txt` already holds everything it opened beyond
+the packs. Append those paths, under RuntimeRoot, to the base manifest. Then rebuild just that
+pack with `stupidsim-linux store pack --manifest base --device agent` and publish it again. A
+fresh first boot should then fetch nothing (`grep -c ' fetched ' .../layers/lazy.log`).
+
 `store lazy` writes `lazy/` (the index and the blobs every other runtime file is fetched from on
 first use) and `packs/metadata.tar.zst` (every bundle's Info.plist and InfoPlist strings, which a
 new machine's first boot reads for all of them). Setup refuses a runtime without them.
