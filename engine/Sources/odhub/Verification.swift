@@ -5,7 +5,7 @@ import OpenDeviceHubEngine
 /// `--verify` for the commands that send input. CoreSimulator accepts a message whether or not the
 /// guest acts on it, so the only evidence that input landed is the screen changing.
 struct Verification: ParsableArguments {
-    @Flag(help: "Fail unless the screen changes after the input. Exits 2 when it does not change and 3 when the screen was already changing too much to tell.")
+    @Flag(help: "Fail unless the screen changes after the input. Exits 2 when it does not change, and 3 without sending the input when the screen was still changing too much to tell after 5 s.")
     var verify = false
 
     @Option(help: "Seconds to wait for the screen to change with --verify.")
@@ -26,6 +26,9 @@ struct Verification: ParsableArguments {
     /// How long a screen must have gone without a new frame for one frame to stand in for the
     /// baseline: longer than the baseline frames span, so it never sees less than they would.
     static let stillEnough: TimeInterval = 1.0
+    /// How long a screen still moving before the input is watched for it to settle.
+    static let settleLimit: TimeInterval = 5
+    static let settleRetrySpacing: Duration = .milliseconds(200)
     /// Between frames after the input, so a host that reads frames instantly is not polled flat out.
     private static let pollSpacing: Duration = .milliseconds(50)
 
@@ -41,33 +44,33 @@ struct Verification: ParsableArguments {
             return
         }
         let host = try SimulatorHosts.current()
-        var baseline: [ScreenFrame] = []
-        // A host that publishes frames only when the screen changes (x86Sim's ring) says how long it
-        // has been still. Still for longer than the spaced baseline would watch, one frame is the
-        // baseline: the spaced frames could only have found the same pixels. The second reading
-        // catches a frame published while that one was copied. In a 4-vCPU cloud session this was
-        // 0.8 s of the ~2.5 s a `tap --label --verify` took (x86Sim 0.5.0, iOS 27.2).
-        if let still = try host.screenStillFor(udid), still >= Self.stillEnough {
-            let frame = try host.screenFrame(udid)
-            if let stillAfter = try host.screenStillFor(udid), stillAfter >= Self.stillEnough {
-                baseline = [frame]
+        // A screen still moving (an on-screen keyboard sliding up after a text field took focus took
+        // about 4 s, x86Sim 0.5.0, iOS 27.2) is watched again until it settles, for up to
+        // `settleLimit`, rather than given up on at once. Nothing is sent until the baseline holds.
+        let settleDeadline = Date().addingTimeInterval(Self.settleLimit)
+        var watched: (before: ScreenFrame, noise: [Bool])?
+        var problem = ""
+        while true {
+            let baseline = try await self.baseline(host, udid)
+            if let noise = ScreenChange.noise(in: baseline), let before = baseline.last {
+                let noisy = noise.lazy.filter { $0 }.count
+                if noisy * 4 < noise.count {
+                    watched = (before, noise)
+                    break
+                }
+                problem = "\(noisy) of \(noise.count) pixels were already changing"
+            } else {
+                problem = "the screen turned while it was being watched"
             }
+            if Date() >= settleDeadline { break }
+            try await Task.sleep(for: Self.settleRetrySpacing)
         }
-        let clock = ContinuousClock()
-        for index in 0..<(baseline.isEmpty ? Self.baselineFrames : 0) {
-            let started = clock.now
-            baseline.append(try host.screenFrame(udid))
-            if index < Self.baselineFrames - 1 {
-                try await Task.sleep(until: started + Self.baselineSpacing, clock: clock)
-            }
-        }
-        guard let noise = ScreenChange.noise(in: baseline), let before = baseline.last else {
-            FileHandle.standardError.write(Data("could not verify: the screen turned while it was being watched\n".utf8))
-            throw ExitCode(Self.inconclusiveExitCode)
-        }
-        let noisy = noise.lazy.filter { $0 }.count
-        guard noisy * 4 < noise.count else {
-            FileHandle.standardError.write(Data("could not verify: \(noisy) of \(noise.count) pixels were already changing\n".utf8))
+        guard let (before, noise) = watched else {
+            FileHandle.standardError.write(Data("""
+                could not verify, so nothing was sent: \(problem) for \(Int(Self.settleLimit)) s. \
+                Wait for the screen to settle and try again.
+
+                """.utf8))
             throw ExitCode(Self.inconclusiveExitCode)
         }
 
@@ -92,5 +95,30 @@ struct Verification: ParsableArguments {
 
             """.utf8))
         throw ExitCode(Self.unchangedExitCode)
+    }
+
+    /// Frames from before the input. A host that publishes frames only when the screen changes
+    /// (x86Sim's ring) says how long it has been still; still for longer than the spaced baseline
+    /// would watch, one frame is the baseline, since the spaced frames could only have found the
+    /// same pixels. The second reading catches a frame published while that one was copied. In a
+    /// 4-vCPU cloud session this was 0.8 s of the ~2.5 s a `tap --label --verify` took (x86Sim
+    /// 0.5.0, iOS 27.2).
+    private func baseline(_ host: any SimulatorHost, _ udid: String) async throws -> [ScreenFrame] {
+        if let still = try host.screenStillFor(udid), still >= Self.stillEnough {
+            let frame = try host.screenFrame(udid)
+            if let stillAfter = try host.screenStillFor(udid), stillAfter >= Self.stillEnough {
+                return [frame]
+            }
+        }
+        var frames: [ScreenFrame] = []
+        let clock = ContinuousClock()
+        for index in 0..<Self.baselineFrames {
+            let started = clock.now
+            frames.append(try host.screenFrame(udid))
+            if index < Self.baselineFrames - 1 {
+                try await Task.sleep(until: started + Self.baselineSpacing, clock: clock)
+            }
+        }
+        return frames
     }
 }
