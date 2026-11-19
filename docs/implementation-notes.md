@@ -40,6 +40,35 @@ trivial guest command took 0.27 s and a tree 0.46–0.69 s; in a 4-vCPU cloud se
   - `tap --label General --verify`: 1.66–2.02 s, against 2.83–3.11 s;
   - the first read after the boot, which started the server: 2.63 s; `paste` then `copy` worked.
 
+## `--verify` waits for a moving screen instead of giving up
+
+`--verify` gave up at once, with exit 3 and without sending the input, when more than a quarter of
+the screen was changing during its baseline. The message did not say that nothing was sent.
+
+- **Where agents met it.** After a tap focuses a text field, the on-screen keyboard slides up 2–4 s
+  later (Safari's address field, x86Sim 0.5.0, iOS 27.2, on the WSL 2 box). `type --verify` started
+  during the slide exited 3 and the field stayed empty. Typing itself works: straight after the tap,
+  after the keyboard settled and after focusing again, the text arrived ("abc", "xyz", "def", read
+  back with `ui-tree`).
+- **Now** a baseline that finds the screen moving that much is taken again every 0.2 s until the
+  screen has settled, for up to 5 s, and only then is the input sent. Settled is stricter than the
+  first baseline's bar: under 1% of pixels changing (a blinking cursor is about 0.01% of an iPhone
+  17 Pro's screen), so input is not sent while an animation is still winding down. A screen that
+  does not settle still exits 3, and the message now says nothing was sent. A first baseline under
+  the quarter bar behaves as before.
+- **The first text typed after a boot is slow to appear.** In a 4-vCPU cloud session, `type hello
+  --verify` into a small SwiftUI app's field exited 2 after 4.1 s, yet the field held "Hell" 3 s later
+  and every key arrived: iOS drew about a character a second while it loaded its keyboard code under
+  translation. The next `type --verify` passed at once. `type` now waits up to 10 s for the change by
+  default (other commands 3 s); the wait ends at the first change, so this costs only a real
+  failure's time. `--verify-timeout` still overrides it.
+- **What it cannot tell apart.** Motion that is not the input's and outlasts the baseline, such as a
+  drag driven at the same time from another command, passed `--verify` before this change and still
+  does.
+- **Verified on the WSL 2 box** (Safari): typing 0, 2 and 3.5 s after tapping the address field, four
+  times each, exited 0 with "abc" in the field; 0.8.4 exited 3 once, leaving it empty.
+  `key left --verify` on a still Settings screen, which changes nothing, still exits 2 (2.1 s).
+
 ## `--verify`: no baseline wait on a still x86Sim screen
 
 `--verify` takes three baseline frames 400 ms apart before sending the input, to learn which pixels

@@ -21,7 +21,11 @@ struct Type: AsyncParsableCommand {
     @OptionGroup var verification: Verification
 
     func run() async throws {
-        try await verification.check(udid) { try await send() }
+        // The first text typed into a field after a boot took over 3 s to appear in a 4-vCPU cloud
+        // session, about a character a second while iOS loaded its keyboard code (x86Sim 0.5.0, iOS
+        // 27.2): the default wait reported no change for keys that had landed. The wait ends at the
+        // first change, so a longer one costs only a failure's time.
+        try await verification.check(udid, defaultTimeout: 10) { try await send() }
     }
 
     private func send() async throws {
