@@ -35,6 +35,11 @@ boot. In a 4-vCPU cloud session it took 175–222 s. The difference was LaunchSe
 - **Measured on the WSL 2 box**, fresh machines as root:
   - with the previous template, first boot 152 s (lsd 65 s);
   - with a template made at /root, first boot 103 s (lsd 0 s), and a reboot 100 s.
+- **Verified in a fresh Claude Code cloud session** (4 vCPU, 16 GB) with stupid simulator 0.8.2 and
+  this template, set up as the README says:
+  - setup took 81 s and the first boot 96 s, against 175–222 s before; lsd used 0 CPU s;
+  - Settings came to the front in 8 s and Safari in 27 s;
+  - 49 units were fetched and none failed.
 
 ## x86Sim 0.5.0
 
