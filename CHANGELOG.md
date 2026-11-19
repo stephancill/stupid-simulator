@@ -3,6 +3,15 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.8.2
+
+- A new cloud machine's first boot no longer re-registers every app bundle with LaunchServices
+  (about 50 s on the test machine). The store's device template is now made at the path a cloud
+  session uses, so setup leaves it in place instead of moving it, which deleted LaunchServices'
+  database. Measured on the test machine: first boot 103 s, down from 152 s.
+- Machines at another path move the template as before. stupidsim 0.8.1 and earlier cannot set up
+  a new device from the new template (x86Sim's repath refuses it): update to 0.8.2.
+
 ## 0.8.1
 
 - Corrected notes on why boots were slow on a WSL 2 machine: x86Sim 0.3.0 fell back to X display

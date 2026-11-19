@@ -39,12 +39,28 @@ x86Sim first:
 3. For each runtime already in the store, build and publish the new x86Sim's warm parts. Do
    step 2 without fetching the runtime: run `aot build --full`, and check that it reports every
    chunk built. If every chunk fails, Darling cannot start (see the next paragraph). Then boot
-   `agent` once, do step 3, and run `stupidsim-linux store warm --device agent`. Publish only
+   `agent` once, do step 3, and run `stupidsim-linux store warm --device agent`. Then make the
+   template at a cloud session's path (next paragraph). Publish only
    the new `warm/x86sim-<version>/` files. The warm parts (translation cache, template device) live under
    `warm/x86sim-<version>/`, so the old version's stay, and machines on an older stupidsim keep
    working. The runtime's skeleton, packs and lazy blobs do not depend on x86Sim; leave them.
    Then fold the first boot's files into the base again (step 6's last part): the new x86Sim
    may start daemons the old one did not.
+
+**The published template device must be booted at root's path.** Setup's repath deletes
+LaunchServices' database, and every new machine's first boot then re-registers every bundle
+(~50 s). A template made at `/root/.local/share/x86sim/var/device-a64-agent` needs no repath on a
+cloud session. Make it on a scratch lazy machine, as root with `HOME=/root`:
+
+```sh
+stupidsim-linux setup --no-boot      # from the store, with the previous template (or the agent one)
+stupidsim-linux boot && stupidsim-linux shutdown
+STUPIDSIM_STORE_DIR=~/rootwarm stupidsim-linux store warm
+```
+
+Upload only `device.tar.zst` and `device.json` from it. Check them first: `device.json` must name
+`/root/...`, and the tarball must hold `data/var/db/lsd/System-…csstore`. A fresh machine's first
+boot from it should leave `lsd` idle.
 
 `stupidsim-linux` installs x86Sim's Darling into `/opt/x86sim` (x86Sim's system mode), because
 0.5.0's user-namespace mode could not start Darling here. On the machine that builds the store,
