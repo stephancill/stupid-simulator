@@ -93,6 +93,33 @@ public enum FrameRing {
         }
         throw X86SimError.failed("x86Sim's frame ring has not published a frame yet.")
     }
+
+    /// When the newest frame was published, from its slot's time (CLOCK_REALTIME, nanoseconds),
+    /// without copying any pixels. simfb publishes only when the screen changes: an idle home
+    /// screen published no frame in 5 s (x86Sim 0.5.0, iOS 27.2), so an old newest frame means a
+    /// still screen.
+    public static func lastPublished(at ring: URL) throws -> Date {
+        let data: Data
+        do {
+            data = try Data(contentsOf: ring, options: .alwaysMapped)
+        } catch {
+            throw X86SimError.failed("x86Sim's frame ring at \(ring.path) could not be read. Is the device running?")
+        }
+        return try lastPublished(in: data)
+    }
+
+    static func lastPublished(in ring: Data) throws -> Date {
+        guard ring.count >= headerSize, ring.prefix(4) == magic else {
+            throw X86SimError.failed("x86Sim's frame ring has no SFBR header.")
+        }
+        let slots = Int(ring.littleEndian(UInt32.self, at: 8))
+        let latest = Int(ring.littleEndian(UInt32.self, at: 40))
+        guard ring.littleEndian(UInt64.self, at: 32) > 0, latest < slots else {
+            throw X86SimError.failed("x86Sim's frame ring has not published a frame yet.")
+        }
+        let nanoseconds = ring.littleEndian(UInt64.self, at: 64 + 32 * latest + 8)
+        return Date(timeIntervalSince1970: Double(nanoseconds) / 1e9)
+    }
 }
 
 extension Data {

@@ -25,10 +25,17 @@ public protocol SimulatorHost: Sendable {
     func screenshot(_ udid: String) throws -> Data
     /// The screen as pixels, for telling whether input changed it.
     func screenFrame(_ udid: String) throws -> ScreenFrame
+    /// How long the screen has gone without a new frame, or nil when the host cannot tell (its
+    /// frames are taken on request, not published on change).
+    func screenStillFor(_ udid: String) throws -> TimeInterval?
     /// Delivers a remote notification payload, as `simctl push` does.
     func push(_ payload: String, bundleID: String?, udid: String) throws
     func setPasteboard(_ text: String, udid: String) throws
     func pasteboard(_ udid: String) throws -> String
+}
+
+extension SimulatorHost {
+    public func screenStillFor(_ udid: String) throws -> TimeInterval? { nil }
 }
 
 public enum SimulatorHosts {

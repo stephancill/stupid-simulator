@@ -23,6 +23,9 @@ struct Verification: ParsableArguments {
     /// milliseconds, and three frames read back to back missed a story ring's animation, so
     /// `--verify` passed on input that had done nothing (x86Sim 0.3.0).
     private static let baselineSpacing: Duration = .milliseconds(400)
+    /// How long a screen must have gone without a new frame for one frame to stand in for the
+    /// baseline: longer than the baseline frames span, so it never sees less than they would.
+    static let stillEnough: TimeInterval = 1.0
     /// Between frames after the input, so a host that reads frames instantly is not polled flat out.
     private static let pollSpacing: Duration = .milliseconds(50)
 
@@ -39,8 +42,19 @@ struct Verification: ParsableArguments {
         }
         let host = try SimulatorHosts.current()
         var baseline: [ScreenFrame] = []
+        // A host that publishes frames only when the screen changes (x86Sim's ring) says how long it
+        // has been still. Still for longer than the spaced baseline would watch, one frame is the
+        // baseline: the spaced frames could only have found the same pixels. The second reading
+        // catches a frame published while that one was copied. In a 4-vCPU cloud session this was
+        // 0.8 s of the ~2.5 s a `tap --label --verify` took (x86Sim 0.5.0, iOS 27.2).
+        if let still = try host.screenStillFor(udid), still >= Self.stillEnough {
+            let frame = try host.screenFrame(udid)
+            if let stillAfter = try host.screenStillFor(udid), stillAfter >= Self.stillEnough {
+                baseline = [frame]
+            }
+        }
         let clock = ContinuousClock()
-        for index in 0..<Self.baselineFrames {
+        for index in 0..<(baseline.isEmpty ? Self.baselineFrames : 0) {
             let started = clock.now
             baseline.append(try host.screenFrame(udid))
             if index < Self.baselineFrames - 1 {

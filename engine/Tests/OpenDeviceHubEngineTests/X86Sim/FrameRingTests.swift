@@ -8,7 +8,7 @@ import ImageIO
 @Suite struct FrameRingTests {
     /// A ring as simfb lays it out: `slots` slots, the frame in `latest`, rows padded to `stride`.
     private func ring(width: Int, height: Int, stride: Int, slots: Int = 2, latest: Int = 1, sequence: UInt64 = 7,
-                      pixel: (Int, Int) -> (UInt8, UInt8, UInt8)) -> Data {
+                      published: UInt64 = 0, pixel: (Int, Int) -> (UInt8, UInt8, UInt8)) -> Data {
         let slotBytes = stride * height
         var data = Data(count: FrameRing.headerSize + slots * slotBytes)
         func put<Value: FixedWidthInteger>(_ value: Value, at offset: Int) {
@@ -25,6 +25,7 @@ import ImageIO
         put(UInt32(latest), at: 40)
         let slotHeader = 64 + 32 * latest
         put(sequence, at: slotHeader)
+        put(published, at: slotHeader + 8)
         put(UInt32(width), at: slotHeader + 16)
         put(UInt32(height), at: slotHeader + 20)
         put(UInt32(stride), at: slotHeader + 24)
@@ -47,6 +48,17 @@ import ImageIO
         let screen = frame.screenFrame()
         #expect(screen.width == 3 && screen.height == 2)
         #expect(screen.pixels[0] != screen.pixels[1])
+    }
+
+    @Test func readsWhenTheNewestFrameWasPublished() throws {
+        let data = ring(width: 2, height: 2, stride: 8, published: 1_795_000_000_250_000_000) { _, _ in (0, 0, 0) }
+        let published = try FrameRing.lastPublished(in: data)
+        #expect(abs(published.timeIntervalSince1970 - 1_795_000_000.25) < 0.001)
+    }
+
+    @Test func hasNoPublishTimeBeforeTheFirstFrame() {
+        let data = ring(width: 2, height: 2, stride: 8, sequence: 0) { _, _ in (0, 0, 0) }
+        #expect(throws: X86SimError.self) { try FrameRing.lastPublished(in: data) }
     }
 
     @Test func refusesSomethingElse() {
