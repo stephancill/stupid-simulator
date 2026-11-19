@@ -142,6 +142,10 @@ public struct X86SimHost: SimulatorHost {
         try FrameRing.latest(at: bootedDevice(udid).frameRing).screenFrame()
     }
 
+    public func screenStillFor(_ udid: String) throws -> TimeInterval? {
+        Date().timeIntervalSince(try FrameRing.lastPublished(at: bootedDevice(udid).frameRing))
+    }
+
     public func push(_ payload: String, bundleID: String?, udid: String) throws {
         let device = try bootedDevice(udid)
         // x86Sim reads the payload from a file or from standard input given as "-".
