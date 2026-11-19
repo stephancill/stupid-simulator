@@ -36,9 +36,20 @@ x86Sim first:
    https://github.com/x86sim/x86sim/releases.
 2. Update `X86SIM_VERSION` and `X86SIM_SHA256` in `linux/stupidsim-linux` and
    `packaging/linux/install.sh` (they must match).
-3. Run the whole of this runbook against the new x86Sim, including step 3 for the iOS versions
-   already in the store: the store records the x86Sim version it was built with, and
-   `stupidsim-linux setup` refuses a mismatch, so every published runtime needs rebuilding.
+3. For each runtime already in the store, build and publish the new x86Sim's warm parts. Do
+   step 2 without fetching the runtime: run `aot build --full`, and check that it reports every
+   chunk built. If every chunk fails, Darling cannot start (see the next paragraph). Then boot
+   `agent` once, do step 3, and run `stupidsim-linux store warm --device agent`. Publish only
+   the new `warm/x86sim-<version>/` files. The warm parts (translation cache, template device) live under
+   `warm/x86sim-<version>/`, so the old version's stay, and machines on an older stupidsim keep
+   working. The runtime's skeleton, packs and lazy blobs do not depend on x86Sim; leave them.
+   Then fold the first boot's files into the base again (step 6's last part): the new x86Sim
+   may start daemons the old one did not.
+
+`stupidsim-linux` installs x86Sim's Darling into `/opt/x86sim` (x86Sim's system mode), because
+0.5.0's user-namespace mode could not start Darling here. On the machine that builds the store,
+run once as root: `sudo stupidsim-linux boot` (or the `sh .../install-helper.sh install ...` line
+it prints). A Darling that cannot start shows up first as `aot build` failing every chunk.
 
 ## 2. Fetch the runtime and make a template device
 
@@ -133,8 +144,12 @@ stupidsim-linux store publish
 - the skeleton (directories, symlinks, the simruntime's own files);
 - a pack per manifest;
 - the translation cache;
-- the template device and its original path;
-- `current.json`.
+- the template device and its original path, under `warm/x86sim-<version>/`.
+
+It does not write `current.json`, the store's default runtime. To make a new runtime the
+default, upload `{"runtime": "<runtime>", "x86sim": "0.3.0"}` as `current.json` last, by hand. Keep
+`"x86sim": "0.3.0"`: stupidsim 0.7.0 and earlier check it, and read that version's warm parts
+from `warm/` unversioned. Newer versions only read `runtime`.
 
 Then fold what a new machine's first boot opens into the base. Publish the store as above, then
 run a fresh setup and boot on another machine or user (step 7). Trace that first boot: it is
@@ -147,9 +162,8 @@ fresh first boot should then fetch nothing (`grep -c ' fetched ' .../layers/lazy
 first use) and `packs/metadata.tar.zst` (every bundle's Info.plist and InfoPlist strings, which a
 new machine's first boot reads for all of them). Setup refuses a runtime without them.
 
-`publish` uploads `current.json` last, so sessions keep fetching the previous runtime until
-everything is in place. To make the new runtime available without making it the default, delete
-`current.json` from `~/store` before publishing; sessions then opt in with
+Until `current.json` names the new runtime, sessions keep fetching the previous one. To use
+the new runtime without making it the default, sessions opt in with
 `stupidsim-linux setup --runtime <runtime>`.
 
 Rolling back means re-uploading the previous `current.json`. The previous runtime's files stay
