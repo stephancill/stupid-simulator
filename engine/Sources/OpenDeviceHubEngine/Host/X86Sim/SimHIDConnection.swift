@@ -22,7 +22,11 @@ public final class SimHIDConnection: @unchecked Sendable {
 
     public init(socket: URL) throws {
         // A long device path is a symlink to a short socket, since sun_path holds 108 bytes.
-        let path = socket.resolvingSymlinksInPath().path
+        descriptor = try Self.connectedDescriptor(path: socket.resolvingSymlinksInPath().path, what: "simhid's socket")
+    }
+
+    /// A Unix socket connected to `path`; `what` names it in errors.
+    static func connectedDescriptor(path: String, what: String) throws -> Int32 {
         let fd = Self.socketDescriptor()
         guard fd >= 0 else { throw Self.posixError("socket") }
         var address = sockaddr_un()
@@ -30,7 +34,7 @@ public final class SimHIDConnection: @unchecked Sendable {
         let capacity = MemoryLayout.size(ofValue: address.sun_path)
         guard path.utf8.count < capacity else {
             _ = Self.closeDescriptor(fd)
-            throw X86SimError.failed("simhid's socket path is too long for a Unix socket: \(path)")
+            throw X86SimError.failed("\(what) path is too long for a Unix socket: \(path)")
         }
         withUnsafeMutableBytes(of: &address.sun_path) { buffer in
             buffer.copyBytes(from: path.utf8)
@@ -46,7 +50,7 @@ public final class SimHIDConnection: @unchecked Sendable {
             _ = Self.closeDescriptor(fd)
             throw error
         }
-        descriptor = fd
+        return fd
     }
 
     /// Writes whole lines, each ending in a newline.
@@ -142,7 +146,7 @@ public final class SimHIDConnection: @unchecked Sendable {
 
     // MARK: - POSIX
 
-    private static func socketDescriptor() -> Int32 {
+    static func socketDescriptor() -> Int32 {
         #if canImport(Glibc)
         socket(AF_UNIX, Int32(SOCK_STREAM.rawValue), 0)
         #else
@@ -150,7 +154,7 @@ public final class SimHIDConnection: @unchecked Sendable {
         #endif
     }
 
-    private static func closeDescriptor(_ fd: Int32) -> Int32 {
+    static func closeDescriptor(_ fd: Int32) -> Int32 {
         #if canImport(Glibc)
         Glibc.close(fd)
         #else
@@ -158,7 +162,7 @@ public final class SimHIDConnection: @unchecked Sendable {
         #endif
     }
 
-    private static func posixError(_ what: String) -> Error {
+    static func posixError(_ what: String) -> Error {
         X86SimError.failed("Could not \(what): \(String(cString: strerror(errno))).")
     }
 }

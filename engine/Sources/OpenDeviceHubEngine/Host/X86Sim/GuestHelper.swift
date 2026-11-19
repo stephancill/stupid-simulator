@@ -7,9 +7,13 @@ import Foundation
 public struct GuestHelper: Sendable {
     public let program: URL
     let install: X86SimInstall
+    /// Whether commands go to a server kept running in the device (the default) or each start the
+    /// program anew, as before 0.8.5. `STUPIDSIM_GUEST_SERVER=0` chooses the latter.
+    let useServer: Bool
 
     public static let programName = "stupidsim-guest"
     public static let programVariable = "STUPIDSIM_GUEST"
+    public static let serverVariable = "STUPIDSIM_GUEST_SERVER"
     static let begin = "@@stupidsim-guest-begin@@"
     static let end = "@@stupidsim-guest-end@@"
     /// A tree read takes about a second under x86Sim on a desktop CPU; this leaves room for a
@@ -23,6 +27,7 @@ public struct GuestHelper: Sendable {
         }
         self.program = program
         self.install = install
+        useServer = environment[Self.serverVariable] != "0"
     }
 
     /// `$STUPIDSIM_GUEST`, else beside the stupidsim executable, else in `../libexec/stupidsim`
@@ -40,6 +45,12 @@ public struct GuestHelper: Sendable {
 
     /// Runs one guest command in the device and returns the JSON it answered.
     func run(_ arguments: [String], device: X86SimDevice) throws -> Data {
+        // The pasteboard is read by a program of its own. In the server, which has loaded AXRuntime
+        // and turned on accessibility automation first, UIPasteboard set the text but read back an
+        // empty string every time, while a fresh program read it (x86Sim 0.5.0, iOS 27.2).
+        if useServer, !(arguments.first ?? "").hasPrefix("pasteboard-") {
+            return try GuestServer(helper: self, device: device).request(arguments)
+        }
         let output = try install.run(
             ["spawn", "--timeout", String(Self.timeoutSeconds), program.path] + arguments,
             device: device
