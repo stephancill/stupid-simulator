@@ -3,7 +3,7 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
-## Unreleased
+## 0.8.5
 
 - On Linux, `ui-tree`, `tap --label`, hit tests and notification banners are about three times
   faster after the first. stupidsim keeps its helper running inside the device for the boot instead
