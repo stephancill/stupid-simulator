@@ -3,6 +3,13 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## Unreleased
+
+- `--verify` on Linux no longer waits 0.8 s before every input when the screen is still. x86Sim
+  publishes a frame only when the screen changes, so a screen with no new frame for a second needs
+  no watching first. A verified tap by label took 1.2–1.3 s on the test machine, down from 2.0–2.1
+  s, and a verified scroll 0.23 s, down from 1.03 s.
+
 ## 0.8.3
 
 - Linux boots no longer wait a fixed 90 s. x86Sim's boot script sleeps that long before it returns
