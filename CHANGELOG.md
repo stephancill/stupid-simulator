@@ -3,6 +3,14 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## Unreleased
+
+- On Linux, `ui-tree`, `tap --label`, hit tests and notification banners are about three times
+  faster after the first. stupidsim keeps its helper running inside the device for the boot instead
+  of starting it for every command: in a 4-vCPU cloud session `ui-tree` took 0.3 s, down from 1.0 s,
+  and a verified tap by label 1.7–2.0 s, down from 2.8–3.1 s. The first command after a boot starts the helper
+  (about 2.5 s). `STUPIDSIM_GUEST_SERVER=0` goes back to starting it each time.
+
 ## 0.8.4
 
 - `--verify` on Linux no longer waits 0.8 s before every input when the screen is still. x86Sim
