@@ -19,6 +19,12 @@ the screen was changing during its baseline. The message did not say that nothin
   17 Pro's screen), so input is not sent while an animation is still winding down. A screen that
   does not settle still exits 3, and the message now says nothing was sent. A first baseline under
   the quarter bar behaves as before.
+- **The first text typed after a boot is slow to appear.** In a 4-vCPU cloud session, `type hello
+  --verify` into a small SwiftUI app's field exited 2 after 4.1 s, yet the field held "Hell" 3 s later
+  and every key arrived: iOS drew about a character a second while it loaded its keyboard code under
+  translation. The next `type --verify` passed at once. `type` now waits up to 10 s for the change by
+  default (other commands 3 s); the wait ends at the first change, so this costs only a real
+  failure's time. `--verify-timeout` still overrides it.
 - **What it cannot tell apart.** Motion that is not the input's and outlasts the baseline, such as a
   drag driven at the same time from another command, passed `--verify` before this change and still
   does.

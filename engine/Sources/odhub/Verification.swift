@@ -8,8 +8,8 @@ struct Verification: ParsableArguments {
     @Flag(help: "Fail unless the screen changes after the input. Exits 2 when it does not change, and 3 without sending the input when the screen was still changing too much to tell after 5 s.")
     var verify = false
 
-    @Option(help: "Seconds to wait for the screen to change with --verify.")
-    var verifyTimeout: Double = 3
+    @Option(help: "Seconds to wait for the screen to change with --verify (default: 3, and 10 for type).")
+    var verifyTimeout: Double?
 
     /// Exit codes an agent can tell apart from a usage error (64) or a failure (1).
     static let unchangedExitCode: Int32 = 2
@@ -36,12 +36,14 @@ struct Verification: ParsableArguments {
     private static let pollSpacing: Duration = .milliseconds(50)
 
     func validate() throws {
-        guard verifyTimeout > 0 else {
+        guard (verifyTimeout ?? 1) > 0 else {
             throw ValidationError("--verify-timeout must be more than zero.")
         }
     }
 
-    func check(_ udid: String, _ input: () async throws -> Void) async throws {
+    /// `defaultTimeout`: how long to wait for the change when `--verify-timeout` is not given.
+    func check(_ udid: String, defaultTimeout: Double = 3, _ input: () async throws -> Void) async throws {
+        let verifyTimeout = self.verifyTimeout ?? defaultTimeout
         guard verify else {
             try await input()
             return

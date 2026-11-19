@@ -9,6 +9,9 @@ under it until the next heading becomes that version's release notes in the upda
   sliding up after a tap on a text field. It waits up to 5 s for the screen to settle before sending
   the input; `type --verify` straight after focusing a field used to exit 3 and type nothing. When
   it does give up, it now says that nothing was sent.
+- `type --verify` waits up to 10 s for the text to appear, not 3 s. The first text typed after a
+  boot took longer than 3 s to show in a cloud session, so `--verify` reported no change for keys
+  that had landed, and retyping would have doubled them.
 
 ## 0.8.4
 

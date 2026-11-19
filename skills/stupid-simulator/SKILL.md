@@ -49,7 +49,9 @@ which needs root. Verified in a Claude Code cloud session
 (4 vCPU, 16 GB): setup about 110 s, first boot about 50 s and a reboot about 30 s (start it
 early, in the background), Settings on screen 8 s after launch and Safari 27 s. Input is not
 realtime: a tap shows on screen 1–2 s later and animations run at 6–18 frames/s, so pass `--verify`
-(or `stupidsim wait`) rather than acting on the next screen straight after an input.
+(or `stupidsim wait`) rather than acting on the next screen straight after an input. The first
+text typed after a boot can take several seconds to appear while iOS loads its keyboard: if
+`type --verify` exits 2, read the field with `ui-tree` before typing again, or the text doubles.
 
 ```bash
 # once (ideally in the environment's setup script, so its snapshot keeps it); as root
