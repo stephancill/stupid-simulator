@@ -3,7 +3,7 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
-## Unreleased
+## 0.8.3
 
 - Linux boots no longer wait a fixed 90 s. x86Sim's boot script sleeps that long before it returns
   unless told otherwise, so every boot took at least 90 s however early the home screen came up.
