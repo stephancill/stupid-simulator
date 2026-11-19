@@ -17,6 +17,8 @@ machines (cloud agent sessions, CI), and records what an app needs from the iOS 
     stupidsim-linux store build [--device NAME] [--manifest NAME ...]
         From a machine with the whole runtime: write the store's files for this runtime to
         $STUPIDSIM_STORE_DIR (skeleton, a pack per manifest, translation cache, device template).
+    stupidsim-linux store warm [--device NAME]
+        Only this x86Sim's warm parts (translation cache, device template), for an x86Sim upgrade.
     stupidsim-linux store pack --manifest NAME ... [--device NAME]
         Only the named manifests' packs (adding an app, or a manifest recorded on another machine).
     stupidsim-linux store lazy [--device NAME]
@@ -38,12 +40,16 @@ signed too. Layout, per runtime build:
                                              RuntimeRoot (the simruntime's own plists)
     runtimes/<runtime>/packs/<name>.tar.zst  the files a manifest lists (base, then one per app)
     runtimes/<runtime>/manifests/<name>.txt  those lists
-    runtimes/<runtime>/warm/jitcache.tar.zst x86Sim's translation cache for the runtime
-    runtimes/<runtime>/warm/device.tar.zst   a device that has booted once on it
-    runtimes/<runtime>/warm/device.json      that device's original path and name
+    runtimes/<runtime>/warm/x86sim-<version>/jitcache.tar.zst
+                                             x86Sim's translation cache for the runtime, per x86Sim version
+    runtimes/<runtime>/warm/x86sim-<version>/device.tar.zst
+                                             a device that has booted once on it with that x86Sim
+    runtimes/<runtime>/warm/x86sim-<version>/device.json
+                                             that device's original path and name
     runtimes/<runtime>/lazy/index.sqlite.zst every entry of the runtime, and where each file's unit is
     runtimes/<runtime>/lazy/blob-NNN         units (a bundle's files as one zstd-compressed tar) end to end
-    current.json                             {"runtime": ..., "x86sim": ...}
+    current.json                             {"runtime": ...}, the default runtime (its "x86sim" is
+                                             for stupidsim 0.7.0 and earlier, which read warm/ unversioned)
 
 The runtime on a set-up machine is an overlay mounted at extracted/: the skeleton and the fetched
 packs (layers/local) over a FUSE file system (layers/lazy, `lazy-serve`) that shows every other
@@ -51,7 +57,7 @@ runtime file from the index and fetches its unit from the store when it is first
 own writes into the runtime land in layers/upper. A file that cannot be fetched fails to open (EIO)
 and is logged in layers/lazy.log.
 
-Only Python's standard library, curl, tar, zstd and libfuse 3 are used. Verified with x86Sim 0.3.0
+Only Python's standard library, curl, tar, zstd and libfuse 3 are used. Verified with x86Sim 0.5.0
 and the iOS 27.2 runtime (24B8117) on Ubuntu 24.04.
 """
 import argparse
@@ -70,8 +76,8 @@ import tempfile
 import time
 import urllib.parse
 
-X86SIM_VERSION = "0.3.0"
-X86SIM_SHA256 = "d697b6e73678c1dbfce8dabbd71fd5a7ef59b110675f9e3ac3cacd42af2e59c8"
+X86SIM_VERSION = "0.5.0"
+X86SIM_SHA256 = "4feaf1730c71fa196d5db9291950d32c3dc476c3ba2d0565aa797f9c66439bb0"
 X86SIM_URL = f"https://github.com/x86sim/x86sim/releases/download/v{X86SIM_VERSION}/x86sim-{X86SIM_VERSION}-x86_64.AppImage"
 DEFAULT_DEVICE = "agent"
 # The store's public read-only address (the bucket behind it is served anonymously, without listing)
@@ -135,13 +141,20 @@ def run_x86sim(args, device=None, env=None, check=True, capture=False, unset=())
 
 
 def install_x86sim():
-    """The pinned AppImage from x86Sim's GitHub release, checked and extracted once."""
+    """The pinned AppImage from x86Sim's GitHub release, checked and extracted, again whenever the pin changes (the
+    extraction's .stupidsim-sha256 names the AppImage it came from, as packaging/linux/install.sh writes it)."""
     target = launcher()
-    if os.path.exists(target):
-        return
-    if os.environ.get("STUPIDSIM_X86SIM"):
-        fail(f"STUPIDSIM_X86SIM names {target}, which does not exist")
     root = os.path.dirname(target)
+    if os.environ.get("STUPIDSIM_X86SIM"):
+        if not os.path.exists(target):
+            fail(f"STUPIDSIM_X86SIM names {target}, which does not exist")
+        return
+    try:
+        with open(os.path.join(root, ".stupidsim-sha256")) as f:
+            if os.path.exists(target) and f.read().strip() == X86SIM_SHA256:
+                return
+    except FileNotFoundError:
+        pass
     os.makedirs(os.path.dirname(root), exist_ok=True)
     image = root + ".AppImage"
     log(f"downloading x86Sim {X86SIM_VERSION}")
@@ -153,11 +166,48 @@ def install_x86sim():
     os.replace(image + ".part", image)
     scratch = tempfile.mkdtemp(dir=os.path.dirname(root))
     subprocess.run([image, "--appimage-extract"], cwd=scratch, check=True, stdout=subprocess.DEVNULL)
+    with open(os.path.join(scratch, "squashfs-root", ".stupidsim-sha256"), "w") as f:
+        f.write(X86SIM_SHA256 + "\n")
     shutil.rmtree(root, ignore_errors=True)
     os.replace(os.path.join(scratch, "squashfs-root"), root)
     shutil.rmtree(scratch, ignore_errors=True)
     os.remove(image)  # extracted; the AppImage itself is never run (it leaves a FUSE mount per run)
     log(f"x86Sim {X86SIM_VERSION} is at {root}")
+
+
+SYSTEM_DARLING = "/opt/x86sim/darling"
+
+
+def ensure_darling():
+    """x86Sim runs Darling either from /opt/x86sim (its "system" mode: a setuid root launcher installed by its
+    install-helper.sh) or through an unprivileged user namespace ("userns" mode), and picks system mode when the
+    installed build matches. Userns mode of x86Sim 0.5.0 could not start a container on Ubuntu 24.04 (WSL 2, kernel
+    6.18), as root or as a user ("Cannot switch to your user and group ids", then "Timed out waiting for shellspawn");
+    system mode worked. So the matching Darling is installed into /opt/x86sim here, as root (setup in a cloud session
+    runs as root); without root, this fails with the command to run."""
+    if os.environ.get("STUPIDSIM_X86SIM"):
+        return
+    share = os.path.join(os.path.dirname(launcher()), "usr", "share", "x86sim")
+    with open(os.path.join(share, "DARLING_ID")) as f:
+        darling_id = f.read().strip()
+    try:
+        with open(os.path.join(SYSTEM_DARLING, ".x86sim-complete")) as f:
+            installed = f.read().strip()
+    except OSError:
+        installed = None
+    launcher_bin = os.path.join(SYSTEM_DARLING, "bin", "darling")
+    if installed == darling_id and os.path.exists(launcher_bin) and os.stat(launcher_bin).st_mode & stat.S_ISUID:
+        return
+    command = ["sh", os.path.join(share, "install-helper.sh"), "install", os.path.join(share, "darling"), darling_id]
+    if os.geteuid() != 0:
+        fail(f"x86Sim's Darling {darling_id} is not installed in /opt/x86sim; install it as root with: sudo {' '.join(command)}")
+    result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if result.returncode != 0:
+        fail(f"installing Darling into /opt/x86sim failed: {result.stdout.strip()}")
+    # The extracted AppImage's directories are mode 700 and the helper only removes write bits, so a user other than
+    # root could not reach the setuid launcher, and x86Sim fell back to userns mode for them.
+    subprocess.run(["chmod", "-R", "a+rX", os.path.join("/opt/x86sim", f"darling-{darling_id}")], check=True)
+    log(f"installed x86Sim's Darling {darling_id} into /opt/x86sim")
 
 
 def sha256_file(path):
@@ -238,6 +288,7 @@ def boot(name, metal="auto", timeout=900):
         return
     started = time.time()
     ensure_runtime_dir()
+    ensure_darling()
     runtime = device_runtime(device)
     if is_lazy(runtime):
         mount_lazy(runtime)
@@ -450,6 +501,11 @@ def fetch_file(key, destination):
     return key
 
 
+def warm_key(runtime, name):
+    """The warm parts depend on the translator, so each x86Sim version has its own; a store serves several at once."""
+    return f"runtimes/{runtime}/warm/x86sim-{X86SIM_VERSION}/{name}"
+
+
 def check_owned(directory):
     """The translation cache must belong to the user who boots (see fetch_and_extract): a cache unpacked by an older
     setup with the store builder's owner is refused rather than left to exhaust memory at boot."""
@@ -506,7 +562,7 @@ def store_pack(device_name, manifests):
         pack_manifest(runtime, name, os.path.join(out_root, "runtimes", runtime))
 
 
-def store_build(device_name, manifests):
+def store_build(device_name, manifests, warm_only=False):
     out_root = os.environ.get("STUPIDSIM_STORE_DIR") or fail("STUPIDSIM_STORE_DIR is not set (where to write the store's files)")
     device = device_dir(device_name)
     runtime = device_runtime(device)
@@ -516,24 +572,28 @@ def store_build(device_name, manifests):
     out = os.path.join(out_root, "runtimes", runtime)
     os.makedirs(os.path.join(out, "packs"), exist_ok=True)
     os.makedirs(os.path.join(out, "manifests"), exist_ok=True)
-    os.makedirs(os.path.join(out, "warm"), exist_ok=True)
+    warm = os.path.join(out, "warm", f"x86sim-{X86SIM_VERSION}")
+    os.makedirs(warm, exist_ok=True)
     if is_booted(device):
         fail(f"shut {device_name} down first (stupidsim-linux shutdown --device {device_name}); a running device's data is not consistent")
 
-    with tempfile.NamedTemporaryFile("w", delete=False) as listing:
-        for directory, dirs, files in os.walk(extracted):
-            rel = os.path.relpath(directory, extracted)
-            listing.write(rel + "\n")
-            for name in dirs + files:
-                path = os.path.join(directory, name)
-                inside = os.path.relpath(path, extracted)
-                if os.path.islink(path) or (name in files and not inside.startswith(root_rel + "/")):
-                    listing.write(inside + "\n")
-    pack(extracted, listing.name, os.path.join(out, "skeleton.tar.zst"))
-    os.remove(listing.name)
+    # The skeleton and the packs are the runtime's own files and do not depend on x86Sim: an x86Sim upgrade needs
+    # only the warm parts (store warm), and leaves the published packs alone.
+    if not warm_only:
+        with tempfile.NamedTemporaryFile("w", delete=False) as listing:
+            for directory, dirs, files in os.walk(extracted):
+                rel = os.path.relpath(directory, extracted)
+                listing.write(rel + "\n")
+                for name in dirs + files:
+                    path = os.path.join(directory, name)
+                    inside = os.path.relpath(path, extracted)
+                    if os.path.islink(path) or (name in files and not inside.startswith(root_rel + "/")):
+                        listing.write(inside + "\n")
+        pack(extracted, listing.name, os.path.join(out, "skeleton.tar.zst"))
+        os.remove(listing.name)
 
-    for name in manifests:
-        pack_manifest(runtime, name, out)
+        for name in manifests:
+            pack_manifest(runtime, name, out)
 
     build = runtime.split("-")[2]
     cache = os.path.join(x86sim_cache(), f"jc-{build}")
@@ -544,7 +604,7 @@ def store_build(device_name, manifests):
             rel = os.path.relpath(directory, x86sim_cache())
             listing.write(rel + "\n")
             listing.writelines(os.path.join(rel, n) + "\n" for n in files if n != "lock" and not n.endswith(".lock"))
-    pack(x86sim_cache(), listing.name, os.path.join(out, "warm", "jitcache.tar.zst"))
+    pack(x86sim_cache(), listing.name, os.path.join(warm, "jitcache.tar.zst"))
     os.remove(listing.name)
 
     with tempfile.NamedTemporaryFile("w", delete=False) as listing:
@@ -558,14 +618,13 @@ def store_build(device_name, manifests):
             listing.writelines(os.path.join(rel, n) + "\n" for n in files if not n.endswith(".sock"))
             listing.writelines(os.path.join(rel, n) + "\n" for n in dirs if os.path.islink(os.path.join(directory, n)))
             listing.write(rel + "\n")
-    pack(os.path.dirname(device), listing.name, os.path.join(out, "warm", "device.tar.zst"))
+    pack(os.path.dirname(device), listing.name, os.path.join(warm, "device.tar.zst"))
     os.remove(listing.name)
-    with open(os.path.join(out, "warm", "device.json"), "w") as f:
+    with open(os.path.join(warm, "device.json"), "w") as f:
         json.dump({"path": device, "directory": os.path.basename(device)}, f)
-
-    with open(os.path.join(out_root, "current.json"), "w") as f:
-        json.dump({"runtime": runtime, "x86sim": X86SIM_VERSION}, f)
-    log(f"store files for {runtime} are in {out_root}; upload them with: stupidsim-linux store publish")
+    # current.json (the default runtime) is not written: changing it is a decision of its own (see
+    # docs/runbooks/new-ios-version.md), and its "x86sim" field must keep naming what older stupidsim versions read.
+    log(f"store files for {runtime} and x86Sim {X86SIM_VERSION} are in {out_root}; upload them with: stupidsim-linux store publish")
 
 
 # ---------------------------------------------------------------- the lazy runtime: building it
@@ -1082,11 +1141,14 @@ def apply_features(device, preset):
 def setup(apps, name, no_boot, metal, runtime=None, features="lean"):
     started = time.time()
     ensure_tools()
-    info = current()
-    runtime = runtime or info["runtime"]
-    if info.get("x86sim") != X86SIM_VERSION:
-        fail(f"the store was built with x86Sim {info.get('x86sim')}, this is {X86SIM_VERSION}")
+    runtime = runtime or current()["runtime"]
+    try:
+        template = json.loads(object_text(warm_key(runtime, "device.json")))
+    except subprocess.CalledProcessError:
+        fail(f"the store has no parts for x86Sim {X86SIM_VERSION} on {runtime} ({warm_key(runtime, '')}); it needs "
+             f"`stupidsim-linux store build` with this x86Sim (docs/runbooks/new-ios-version.md)")
     install_x86sim()
+    ensure_darling()
     run_x86sim(["version"], capture=True)  # copies x86Sim's payload into its data directory once
 
     base = f"runtimes/{runtime}"
@@ -1096,6 +1158,8 @@ def setup(apps, name, no_boot, metal, runtime=None, features="lean"):
     marker = os.path.join(rdir, ".stupidsim-parts")
     have = set(open(marker).read().split()) if os.path.exists(marker) else set()
     parts = ["skeleton", "base", "metadata", "index"] + list(apps)
+    warm_part = f"jitcache-x86sim-{X86SIM_VERSION}"
+    jitcache = os.path.join(x86sim_cache(), f"jc-{runtime.split('-')[2]}")
     # The fetched parts are the overlay's top layer (layers/local); the rest of the runtime is fetched on first use.
     extracted, local = os.path.join(rdir, "extracted"), os.path.join(layers_dir(runtime), "local")
     if os.path.isdir(extracted) and not os.path.ismount(extracted) and os.listdir(extracted):
@@ -1112,17 +1176,19 @@ def setup(apps, name, no_boot, metal, runtime=None, features="lean"):
                 continue
             key = f"{base}/skeleton.tar.zst" if part == "skeleton" else f"{base}/packs/{part}.tar.zst"
             jobs.append(pool.submit(fetch_and_extract, key, local))
-        if not os.path.isdir(os.path.join(x86sim_cache(), f"jc-{runtime.split('-')[2]}")):
-            jobs.append(pool.submit(fetch_and_extract, f"{base}/warm/jitcache.tar.zst", x86sim_cache()))
+        if warm_part not in have:
+            # Another x86Sim's cache (or one from before caches were versioned) is replaced, not merged into.
+            shutil.rmtree(jitcache, ignore_errors=True)
+            jobs.append(pool.submit(fetch_and_extract, warm_key(runtime, "jitcache.tar.zst"), x86sim_cache()))
         fresh_device = not os.path.isdir(device)
         if fresh_device:
             scratch = tempfile.mkdtemp(dir=os.path.join(x86sim_data(), "var") if os.path.isdir(os.path.join(x86sim_data(), "var")) else None)
-            jobs.append(pool.submit(fetch_and_extract, f"{base}/warm/device.tar.zst", scratch))
+            jobs.append(pool.submit(fetch_and_extract, warm_key(runtime, "device.tar.zst"), scratch))
         for job in concurrent.futures.as_completed(jobs):
             log(f"fetched {job.result()} ({time.time() - started:.0f} s)")
     with open(marker, "w") as f:
-        f.write(" ".join(sorted(have | set(parts))))
-    check_owned(os.path.join(x86sim_cache(), f"jc-{runtime.split('-')[2]}"))
+        f.write(" ".join(sorted((have - {p for p in have if p.startswith("jitcache-x86sim-")}) | set(parts) | {warm_part})))
+    check_owned(jitcache)
     link = os.path.join(rdir, "RuntimeRoot")
     if not os.path.islink(link):
         # Into the mount point; the path inside is the same in layers/local, where the skeleton is.
@@ -1130,7 +1196,6 @@ def setup(apps, name, no_boot, metal, runtime=None, features="lean"):
     os.makedirs(extracted, exist_ok=True)
 
     if fresh_device:
-        template = json.loads(object_text(f"{base}/warm/device.json"))
         os.makedirs(os.path.dirname(device), exist_ok=True)
         os.replace(os.path.join(scratch, template["directory"]), device)
         shutil.rmtree(scratch, ignore_errors=True)
@@ -1190,7 +1255,7 @@ def main():
     p.add_argument("--device", default=DEFAULT_DEVICE)
     p.add_argument("--base", help="leave out the files of this manifest (normally base)")
     p = commands.add_parser("store")
-    p.add_argument("action", choices=["build", "lazy", "pack", "publish", "presign"])
+    p.add_argument("action", choices=["build", "warm", "lazy", "pack", "publish", "presign"])
     p.add_argument("key", nargs="?")
     p.add_argument("--device", default=DEFAULT_DEVICE)
     p.add_argument("--manifest", action="append", default=[])
@@ -1219,6 +1284,8 @@ def main():
             trace_end(a.name, a.device, a.base)
     elif a.action == "build":
         store_build(a.device, a.manifest or ["base"])
+    elif a.action == "warm":
+        store_build(a.device, [], warm_only=True)
     elif a.action == "lazy":
         store_lazy(a.device)
     elif a.action == "pack":

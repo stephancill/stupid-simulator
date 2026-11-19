@@ -11,8 +11,8 @@
 # downloaded, not bundled.
 set -euo pipefail
 
-X86SIM_VERSION=0.3.0
-X86SIM_SHA256=d697b6e73678c1dbfce8dabbd71fd5a7ef59b110675f9e3ac3cacd42af2e59c8
+X86SIM_VERSION=0.5.0
+X86SIM_SHA256=4feaf1730c71fa196d5db9291950d32c3dc476c3ba2d0565aa797f9c66439bb0
 X86SIM_URL="https://github.com/x86sim/x86sim/releases/download/v${X86SIM_VERSION}/x86sim-${X86SIM_VERSION}-x86_64.AppImage"
 
 prefix="${HOME}/.local"

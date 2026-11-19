@@ -3,6 +3,52 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## x86Sim 0.5.0
+
+`stupidsim-linux` and `packaging/linux/install.sh` pin x86Sim 0.5.0 (was 0.3.0).
+
+- **The interfaces stupidsim uses did not change.** Between 0.3.0 and 0.5.0 these are identical:
+  `fbring.py` (the frame ring), `simtouch.py` (simhid's lines), `mksimdevice.py` (sim.env),
+  `device-repath.py`, the `x86sim` command and simfb. `boot-a64.sh` only gained on-demand
+  daemons.
+  - One of those daemons is `dmd`: without it, ScreenTimeAgent retried a failing connection
+    for good, at ~90% CPU. That was the spin seen on first boots.
+  - 0.4.0 also removed iokitd's fallback to X display `:0`.
+- **Darling now runs from /opt/x86sim ("system" mode).** x86Sim runs Darling either from
+  `/opt/x86sim` (a setuid launcher, installed by its `install-helper.sh`) or through an
+  unprivileged user namespace ("userns" mode), and picks system mode when the installed build
+  matches.
+  - In userns mode, 0.5.0 could not start a container on Ubuntu 24.04 under WSL 2 (kernel
+    6.18), as root or as a user: "Cannot switch to your user and group ids", then "Timed out
+    waiting for shellspawn in container". `aot build` failed every chunk the same way, and
+    quietly assembled an image from the previous version's chunks. Its updated Darling launcher
+    switches ids on start; our unconfirmed guess is that this needs `setgroups()`, which
+    `unshare -r` denies.
+  - `stupidsim-linux` therefore installs the matching Darling into `/opt/x86sim` (`ensure_darling`,
+    at setup and boot) when it runs as root, as setup does in a cloud session. Otherwise it fails
+    with the `sudo` command to run.
+  - The extracted AppImage's directories are mode 700, and the helper only removes write bits,
+    so the installed tree is made readable (`chmod -R a+rX`). Without that, a non-root user
+    could not reach the launcher, and x86Sim fell back to userns mode for them.
+- **The store's warm parts are versioned per x86Sim** (`runtimes/<runtime>/warm/x86sim-<version>/`).
+  The translation cache and the template device depend on the translator, so 0.5.0 needed new
+  ones.
+  - stupidsim 0.7.0 and earlier keep reading the 0.3.0 parts from `warm/` unversioned, with
+    `current.json`'s `"x86sim": "0.3.0"`. Neither was touched, so machines on 0.7.0 kept working.
+  - Setup no longer checks `current.json`'s `x86sim`. It fetches its own version's
+    `device.json` first, and says so when the store has none.
+  - An existing machine re-fetches the translation cache when its x86Sim version changes (the
+    `jitcache-x86sim-<version>` part), and re-extracts the AppImage when its checksum changes
+    (the extraction's `.stupidsim-sha256`, as `install.sh` already did).
+  - `store warm` builds only those parts. `store build` no longer writes `current.json`.
+- **Verified on the WSL 2 box, as a normal user, in system mode, on iOS 27.2 (24B8117).**
+  - `aot build --full` built all 1,537 chunks in 87 s, a 1,316 MB image.
+  - The template device booted in 95–96 s.
+  - Every stupidsim check passed: `doctor`, the SpringBoard tree, installing the test host and
+    allowing its notifications with `tap --verify`, rotation both ways, Home, `push --verify`,
+    dismissing the banner, paste and copy, a screenshot, and Settings → General.
+  - The warm parts are 0.74 GB (translation cache) and 1.00 GB (device).
+
 ## Fetching runtime files on first use (`stupidsim-linux`, lazy runtime)
 
 A machine set up from the store used to get only the runtime files that traces recorded. An app
