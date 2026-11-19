@@ -82,8 +82,8 @@ another extracted copy of x86Sim (its `AppRun`).
 #### Throwaway machines: cloud agent sessions and CI
 
 Fetching and unpacking an iOS runtime from Apple, then booting a new device, takes about 20
-minutes and 36 GB. `stupidsim-linux setup` does it in about two minutes instead (120 s in a
-Claude Code cloud session, then a first boot of about 4 minutes), from a runtime store served read-only at
+minutes and 36 GB. `stupidsim-linux setup` does it in about two minutes instead (110 s in a
+Claude Code cloud session, then a first boot of about 50 s), from a runtime store served read-only at
 `https://stupidsim-store.stupidtech.net`:
 
 - **Up front, only the runtime files a boot reads.** The base is 6,158 of the runtime's 588,000
