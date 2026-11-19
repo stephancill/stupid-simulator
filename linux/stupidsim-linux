@@ -292,7 +292,11 @@ def boot(name, metal="auto", timeout=900):
     runtime = device_runtime(device)
     if is_lazy(runtime):
         mount_lazy(runtime)
-    env = dict(vulkan_env(metal), A64_KEEP="1")
+    # SECS: boot-a64.sh sleeps this long after starting the device, before its summary and before returning; unset it
+    # is 90, so every boot took at least 90 s however early home came up. 20 is what x86Sim's own launcher passes
+    # (tools/launcher/core/src/instance.rs, 0.5.0); `wait home` below does the real waiting. What runs after the sleep
+    # is a report, and the launchd log it tails is only diagnostics.
+    env = dict(vulkan_env(metal), A64_KEEP="1", SECS="20")
     # Without DISPLAY: the screen comes from simfb, not X. Darling's iokitd opens an X display on its main thread before
     # it answers any Mach message, and every guest process that touches IOKit waits for it, so a DISPLAY whose server
     # does not answer stalls the boot. x86Sim 0.3.0's iokitd still falls back to :0 without it (removed in 0.4.0); see
