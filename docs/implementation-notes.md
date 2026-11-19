@@ -3,6 +3,33 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## Linux boots: no fixed 90 s wait
+
+Every Linux boot took 96–100 s: a first boot, a reboot, one with the page cache dropped, and one
+with the `minimal` feature preset. That was a fixed wait, not boot work.
+
+- **The cause.** `stupidsim-linux boot` runs x86Sim's `cli/libexec/arm64/boot-a64.sh`, which
+  starts the device and then sleeps `SECS` seconds (90 when unset) before printing a summary and
+  returning. Only then did `x86sim wait home` start polling the frame. x86Sim's own launcher
+  passes `SECS=20` (`tools/launcher/core/src/instance.rs`, 0.5.0).
+- **The fix.** `boot` passes `SECS=20` too, and `wait home` does the waiting. What the script
+  runs after the sleep is a report: spawn counts, cgroup containment and parked helpers. The
+  launchd log it tails for `SECS` + 2 s is only read for diagnostics (x86Sim's launcher and
+  `bootwatch.sh`).
+- **A frame left from an earlier boot cannot pass `wait home`.** A shutdown (`A64_STOP_ONLY`)
+  deletes the device's frame ring, and the next boot makes a new one.
+- **Profiled in a fresh Claude Code cloud session** (4 vCPU, 16 GB, x86Sim 0.5.0, iOS 27.2),
+  sampling per-process CPU every 5 s:
+  - before the fix, all 4 CPUs were busy from about 20 s to 45 s, and fewer than 2 were busy from
+    70 s on, while the boot still returned at 97–99 s;
+  - with the fix, a first boot took 52 s and a reboot 32 s (34 s with `minimal`). After each,
+    `stupidsim ui-tree` answered with the home screen at once, and nothing failed to fetch.
+- **A reboot with a dropped page cache took as long as a first boot** (98 s against 99 s, before
+  the fix). So a session that resumes a snapshot of a machine that has already booted once would
+  probably not boot faster than a first boot does.
+- **Where the CPU goes in a boot:** SpringBoard (~17 CPU s), x86Sim's Python helpers (~16), mtlvk
+  (~13, Metal on lavapipe) and darlingserver (~5). Nothing else used more than 3.
+
 ## First boot: keeping LaunchServices' database
 
 A new machine's first boot took ~150–175 s on the WSL 2 box, against 96–100 s for every later

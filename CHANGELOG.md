@@ -3,6 +3,12 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## Unreleased
+
+- Linux boots no longer wait a fixed 90 s. x86Sim's boot script sleeps that long before it returns
+  unless told otherwise, so every boot took at least 90 s however early the home screen came up.
+  In a 4-vCPU cloud session a first boot now takes 52 s (was 99 s) and a reboot 32 s (was 97 s).
+
 ## 0.8.2
 
 - A new cloud machine's first boot no longer re-registers every app bundle with LaunchServices
