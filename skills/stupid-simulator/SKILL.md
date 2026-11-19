@@ -46,13 +46,15 @@ No Mac, Xcode or credentials needed: a public store holds the runtime files a bo
 translation cache and a device that has booted once. Any other runtime file is fetched the first
 time something opens it, so any app runs, and so do the system apps. Booting mounts the runtime,
 which needs root. Verified in a Claude Code cloud session
-(4 vCPU, 16 GB): setup 123 s, first boot 222 s (start it early, in the background), Settings on
-screen 13 s after launch and Safari 35 s, 5.2 GB in use.
+(4 vCPU, 16 GB): setup about 110 s, first boot about 50 s and a reboot about 30 s (start it
+early, in the background), Settings on screen 8 s after launch and Safari 27 s. Input is not
+realtime: a tap shows on screen 1–2 s later and animations run at 6–18 frames/s, so pass `--verify`
+(or `stupidsim wait`) rather than acting on the next screen straight after an input.
 
 ```bash
 # once (ideally in the environment's setup script, so its snapshot keeps it); as root
 curl -fsSL -o cloud-setup.sh https://raw.githubusercontent.com/stephancill/stupid-simulator/main/linux/cloud-setup.sh && bash cloud-setup.sh   # download, then run: piping into bash may be refused
-# each session: boot and wait for the home screen (about 4 minutes; run it in the background and
+# each session: boot and wait for the home screen (about 50 s; run it in the background and
 # poll for its "booted in" line, since tool calls may time out)
 stupidsim-linux boot
 export X86SIM_DEVICE=$(ls -d ~/.local/share/x86sim/var/device-a64-agent)
