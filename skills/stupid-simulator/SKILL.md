@@ -46,8 +46,8 @@ No Mac, Xcode or credentials needed: a public store holds the runtime files a bo
 translation cache and a device that has booted once. Any other runtime file is fetched the first
 time something opens it, so any app runs, and so do the system apps. Booting mounts the runtime,
 which needs root. Verified in a Claude Code cloud session
-(4 vCPU, 16 GB): setup 120 s, first boot about 7 minutes (start it early, in the background),
-Maps on screen 27 s after launch, 5.2 GB in use.
+(4 vCPU, 16 GB): setup 123 s, first boot 222 s (start it early, in the background), Settings on
+screen 13 s after launch and Safari 35 s, 5.2 GB in use.
 
 ```bash
 # once (ideally in the environment's setup script, so its snapshot keeps it); as root or a user
