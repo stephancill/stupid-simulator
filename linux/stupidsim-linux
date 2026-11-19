@@ -1202,9 +1202,13 @@ def setup(apps, name, no_boot, metal, runtime=None, features="lean"):
         with open(os.path.join(device, "name"), "w") as f:
             f.write(name + "\n")
         # The device's stores keep its absolute path; x86Sim's own tool moves them (device-a64.py does the same for clones).
-        repath = run_x86sim(["shell", "-c", f'python3 cli/libexec/arm64/device-repath.py "{device}" "{template["path"]}"'], capture=True, check=False)
-        if repath.returncode != 0:
-            fail(f"moving the device template's paths failed: {repath.stdout[-1500:]}")
+        # It deletes lsd's csstores (it cannot rewrite them), and LaunchServices then registers every bundle again on the
+        # first boot (~65 CPU s of lsd). The store's template is made at a cloud session's path (root's), so there it
+        # needs no move and keeps them; device-repath.py also refuses a device whose path is the template's.
+        if os.path.realpath(template["path"]) != os.path.realpath(device):
+            repath = run_x86sim(["shell", "-c", f'python3 cli/libexec/arm64/device-repath.py "{device}" "{template["path"]}"'], capture=True, check=False)
+            if repath.returncode != 0:
+                fail(f"moving the device template's paths failed: {repath.stdout[-1500:]}")
     apply_features(device, features)
     log(f"set up in {time.time() - started:.0f} s")
     if not no_boot:

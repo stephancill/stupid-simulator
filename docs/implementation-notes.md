@@ -3,6 +3,39 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## First boot: keeping LaunchServices' database
+
+A new machine's first boot took ~150–175 s on the WSL 2 box, against 96–100 s for every later
+boot. In a 4-vCPU cloud session it took 175–222 s. The difference was LaunchServices: `lsd` spent
+~65 CPU seconds re-registering every bundle on the first boot, and none on later ones.
+
+- **The cause was setup's repath.** Setup moves the template device to this machine's path with
+  x86Sim's `device-repath.py`. That tool deletes lsd's csstores (`data/var/db/lsd/*.csstore`)
+  whenever they contain the old path, because the format cannot be rewritten in place. lsd then
+  rebuilds them at boot from every bundle.
+- **Ruled out**, on the same box, by changing one thing per boot:
+  - a new `/etc/machine-id`;
+  - the runtime's top layer copied again (new inodes);
+  - the device directory copied again;
+  - restored directory times;
+  - a remount;
+  - a cold page cache.
+
+  All of these booted in 100–105 s with lsd idle. Only putting back the device's csstores as
+  setup left them (`SystemDataOnly` without `System-…csstore`) brought back the 65 s. So did the
+  template's original store, which names another path.
+- **The fix.** The store's template device is now made at a cloud session's path:
+  `/root/.local/share/x86sim/var/device-a64-agent`, root's, since setup runs as root there.
+  - It is a lazy machine's device after one boot, shut down and packed with `store warm`, with
+    both stores; `store warm` keeps them.
+  - Setup skips the repath when the template's path is the device's. That is needed, not only
+    faster: `device-repath.py` refuses such a device ("DEVICE is the base device"), so 0.8.1 and
+    earlier fail to set up a new device from this template.
+  - Machines at any other path still repath, and their first boot still re-registers.
+- **Measured on the WSL 2 box**, fresh machines as root:
+  - with the previous template, first boot 152 s (lsd 65 s);
+  - with a template made at /root, first boot 103 s (lsd 0 s), and a reboot 100 s.
+
 ## x86Sim 0.5.0
 
 `stupidsim-linux` and `packaging/linux/install.sh` pin x86Sim 0.5.0 (was 0.3.0).
@@ -106,8 +139,8 @@ the first time something opens it, so any app runs without a recorded manifest.
     and its settings opened with `tap --verify`. Safari took 26 s. That was 49 units in all, and
     none failed.
 - **Bundle metadata is prefetched as its own pack (`packs/metadata.tar.zst`).**
-  - On a new machine's first boot, LaunchServices registers every bundle again. The device
-    template's database names the template's path, so it is not reused. Registration reads each
+  - On a new machine's first boot, LaunchServices registered every bundle again: setup's repath
+    deleted its database (see "First boot: keeping LaunchServices' database"). Registration reads each
     bundle's `Info.plist` and its `InfoPlist.strings` in every language.
   - With only the FUSE layer below, that first boot fetched 26,642 units one by one (25,656 of
     them for an `InfoPlist.strings`), 0.4 GB compressed and 6 minutes from a local disk.
