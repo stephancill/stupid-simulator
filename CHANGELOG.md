@@ -3,6 +3,20 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.8.0
+
+- On Linux, stupidsim uses x86Sim 0.5.0 (was 0.3.0). It brings upstream's fixes, among them
+  ScreenTimeAgent no longer spinning at ~90% CPU on a first boot, and a boot that no longer tries
+  to open an X display.
+- `stupidsim-linux` installs x86Sim's Darling into `/opt/x86sim` (x86Sim's "system" mode), as
+  root, at setup and boot. x86Sim 0.5.0's user-namespace mode could not start Darling on Ubuntu
+  24.04 under WSL 2. A cloud session's setup runs as root and needs nothing new. Elsewhere, setup
+  prints the one `sudo` command to run.
+- The runtime store keeps each x86Sim version's translation cache and device template apart, so
+  machines on 0.7.0 keep working. A machine set up by 0.7.0 downloads x86Sim 0.5.0 and its
+  translation cache on its next setup.
+- `stupidsim-linux store warm` builds only an x86Sim version's parts of the store.
+
 ## 0.7.0
 
 - On Linux, any app runs without a recorded runtime manifest. Setup still fetches the files a
