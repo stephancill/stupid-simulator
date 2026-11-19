@@ -50,9 +50,9 @@ which needs root. Verified in a Claude Code cloud session
 screen 13 s after launch and Safari 35 s, 5.2 GB in use.
 
 ```bash
-# once (ideally in the environment's setup script, so its snapshot keeps it); as root or a user
-curl -fsSL https://raw.githubusercontent.com/stephancill/stupid-simulator/main/linux/cloud-setup.sh | bash
-# each session: boot and wait for the home screen (about 2 minutes; run it in the background and
+# once (ideally in the environment's setup script, so its snapshot keeps it); as root
+curl -fsSL -o cloud-setup.sh https://raw.githubusercontent.com/stephancill/stupid-simulator/main/linux/cloud-setup.sh && bash cloud-setup.sh   # download, then run: piping into bash may be refused
+# each session: boot and wait for the home screen (about 4 minutes; run it in the background and
 # poll for its "booted in" line, since tool calls may time out)
 stupidsim-linux boot
 export X86SIM_DEVICE=$(ls -d ~/.local/share/x86sim/var/device-a64-agent)
