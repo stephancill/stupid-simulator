@@ -105,7 +105,8 @@ final class FoldableControllerTests: XCTestCase {
         let sent = try XCTUnwrap(hinges["A"]?.angles.dropFirst())
         // A slow machine steps less often; the move still takes its second and keeps its shape.
         XCTAssertGreaterThan(sent.count, 4, "a run of angles, not one")
-        XCTAssertEqual(sent.first, 180, "starting where it was")
+        // The first step can land a moment after the start (179.99999999999986 on a CI runner), so near is enough.
+        XCTAssertEqual(try XCTUnwrap(sent.first), 180, accuracy: 1, "starting where it was")
         XCTAssertEqual(sent.last, 0, "ending on the preset")
         XCTAssertEqual(Array(sent), sent.sorted(by: >), "never turning back")
         XCTAssertEqual(drawn, Array(sent), "the window is shown the same run")
