@@ -3,6 +3,12 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.8.1
+
+- Corrected notes on why boots were slow on a WSL 2 machine: x86Sim 0.3.0 fell back to X display
+  `:0` even without `DISPLAY`, and the machine's broken X server and mirrored networking hung that
+  connection. No change in behaviour.
+
 ## 0.8.0
 
 - On Linux, stupidsim uses x86Sim 0.5.0 (was 0.3.0). It brings upstream's fixes, among them
