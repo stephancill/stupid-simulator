@@ -3,6 +3,24 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.7.0
+
+- On Linux, any app runs without a recorded runtime manifest. Setup still fetches the files a
+  boot needs, and every other iOS runtime file is now fetched from the store the first time
+  something opens it. Safari, Maps and the other system apps open too. Each fetch is logged in
+  `layers/lazy.log` under the runtime, and a file that cannot be fetched fails to open with the
+  reason logged there.
+- Booting on Linux mounts the runtime (an overlay over a FUSE file system), which needs root and
+  libfuse 3; `cloud-setup.sh` installs `fuse3`. A runtime set up by an earlier version must be
+  removed and set up again; setup says so.
+- A new machine's first boot fetches nothing beyond setup: the base now includes everything that
+  boot opens.
+- Boot no longer waits for an X display. Under WSL a boot took up to four minutes longer, while
+  Darling's iokitd tried to reach WSLg's X server.
+- `stupidsim-linux trace` works on a machine that fetches the runtime on demand, so recording an
+  app's manifest no longer needs a machine with the whole runtime. `store pack` rebuilds one pack,
+  and `store lazy` builds the on-demand store.
+
 ## 0.6.0
 
 - `stupidsim` runs on Linux. It drives the iOS simulators of [x86Sim](https://github.com/x86sim/x86sim),
