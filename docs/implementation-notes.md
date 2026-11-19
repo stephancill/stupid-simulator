@@ -3,6 +3,43 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## A guest server for the accessibility tree
+
+On Linux every `ui-tree`, `tap --label`, hit test and banner read started `stupidsim-guest` in the
+device with `x86sim spawn`. Starting it was about half of each read: on the WSL 2 box (20 cores) a
+trivial guest command took 0.27 s and a tree 0.46–0.69 s; in a 4-vCPU cloud session a tree took
+~1 s.
+
+- **What changed.** stupidsim now starts `stupidsim-guest serve <socket>` the first time it needs
+  the guest and keeps it for the boot. Each request is a connection carrying one line, a JSON array
+  of the command and its arguments; the answer is the same JSON the one-shot program prints, without
+  the marker lines, and the server closes the connection after it. AXRuntime is called on the
+  server's main thread, as before; connections are accepted and answered one at a time on another.
+- **The socket** is `data/stupidsim-guest-<hash>.sock` beside simhid's, the guest binding it as
+  Darling shows the Linux root (`/Volumes/SystemRoot` + the path). The hash is of the guest
+  program's bytes, so a newer stupidsim never asks an older server. A path too long for the guest's
+  104-byte `sun_path` moves to `/run/user/<uid>`.
+- **Starting it.** x86Sim's `spawn` returns once its timeout passes and leaves the program running
+  ("still running after N s"), so stupidsim spawns the server with a 2 s timeout and waits up to 30 s
+  for its socket. A lock file beside the socket keeps two commands from starting one each. Anything
+  but "still running" means the server ended, and its output is the error. After a reboot the old
+  socket refuses connections and a new server is started.
+- **The pasteboard still starts a program of its own.** Through the server UIPasteboard set the text
+  but read back an empty string every time, while a fresh program read it; the difference is that
+  the server has loaded AXRuntime and turned on accessibility automation first.
+- `STUPIDSIM_GUEST_SERVER=0` starts a program per command, as before.
+- **Verified on the WSL 2 box** (x86Sim 0.5.0, iOS 27.2, Settings in front):
+  - `ui-tree`: 0.14–0.15 s, against 0.50–0.51 s starting a program each time, with the same output;
+  - a hit test (`ui-tree --at`): 0.08 s;
+  - `tap --label General --verify`: 0.94–0.96 s (1.24–1.29 s in 0.8.4, 2.0–2.1 s in 0.8.3);
+  - the first read after a boot, which starts the server: 2.35–2.49 s, once;
+  - two `ui-tree`s at once on a fresh boot: both answered the same, and one server ran;
+  - `paste` then `copy`: the text came back; after a reboot the server started again.
+- **Verified in a fresh Claude Code cloud session** (4 vCPU, branch built there, Settings in front):
+  - `ui-tree`: 0.30–0.37 s, against 0.97–1.17 s with 0.8.4;
+  - `tap --label General --verify`: 1.66–2.02 s, against 2.83–3.11 s;
+  - the first read after the boot, which started the server: 2.63 s; `paste` then `copy` worked.
+
 ## `--verify` waits for a moving screen instead of giving up
 
 `--verify` gave up at once, with exit 3 and without sending the input, when more than a quarter of
