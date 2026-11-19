@@ -3,7 +3,7 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
-## Unreleased
+## 0.8.4
 
 - `--verify` on Linux no longer waits 0.8 s before every input when the screen is still. x86Sim
   publishes a frame only when the screen changes, so a screen with no new frame for a second needs
