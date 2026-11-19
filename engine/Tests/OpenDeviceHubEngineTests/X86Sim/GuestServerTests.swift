@@ -17,10 +17,11 @@ import Darwin
 
         init(reply: String) throws {
             #if canImport(Glibc)
-            listener = socket(AF_UNIX, Int32(SOCK_STREAM.rawValue), 0)
+            let fd = socket(AF_UNIX, Int32(SOCK_STREAM.rawValue), 0)
             #else
-            listener = socket(AF_UNIX, SOCK_STREAM, 0)
+            let fd = socket(AF_UNIX, SOCK_STREAM, 0)
             #endif
+            listener = fd
             var address = sockaddr_un()
             address.sun_family = sa_family_t(AF_UNIX)
             withUnsafeMutableBytes(of: &address.sun_path) { buffer in
@@ -29,14 +30,13 @@ import Darwin
             }
             let bound = withUnsafePointer(to: &address) {
                 $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    bind(listener, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+                    bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
                 }
             }
             #expect(bound == 0)
-            #expect(listen(listener, 1) == 0)
-            let listener = listener
+            #expect(listen(fd, 1) == 0)
             Thread.detachNewThread { [self] in
-                let connection = accept(listener, nil, nil)
+                let connection = accept(fd, nil, nil)
                 var line = Data()
                 var byte: UInt8 = 0
                 while read(connection, &byte, 1) == 1, byte != 0x0A { line.append(byte) }
