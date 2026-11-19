@@ -125,25 +125,30 @@ the first time something opens it, so any app runs without a recorded manifest.
   - Safari launched and showed its start page, which it never did on a runtime pruned to a
     trace;
   - nothing failed to fetch.
-- **Booting without `DISPLAY`.** On the WSL 2 box a boot of the lazy runtime took 193–370 s,
-  against 91 s for the pruned runtime. A device on the whole, unmounted runtime was as slow
-  (211–261 s), so the lazy runtime was not the cause.
-  - **The cause was Darling's iokitd.** At startup its main thread calls `XOpenDisplay()`
+- **Slow boots on the WSL 2 box were its X server, not the lazy runtime.** A boot of the lazy
+  runtime took 193–370 s there, against 91 s for the pruned runtime. A device on the whole,
+  unmounted runtime was as slow (211–261 s).
+  - **Darling's iokitd opens an X display at startup.** Its main thread calls `XOpenDisplay()`
     (`poll ← xcb_connect_to_fd ← XOpenDisplay` in gdb) before it answers any Mach message.
     Every guest process that touches IOKit waits for it, and the rest of the boot queues behind
     those processes. Examples: lsd's main thread, UserEventAgent's alarm plugin ("took 195.148
     s"), securityd and backboardd, and logd's listeners.
-  - **Under WSLg nothing answers that call.** Its X server crash-loops (weston, a segfault in
-    `rdp-backend.so` every ~102 s), and its X0 socket accepts and never replies. Then Xlib's TCP
-    fallback to `127.0.0.1:6000` hangs about 135 s, because mirrored networking drops connections
-    to closed loopback ports instead of refusing them.
+  - **x86Sim 0.3.0's iokitd falls back to `:0` when `DISPLAY` is unset.** That is the
+    `/tmp/.X11-unix/X0` socket, or TCP `127.0.0.1:6000` without it. Upstream removed the
+    fallback in v0.4.0. So `boot` running x86Sim without `DISPLAY` (which it still does: the
+    screen comes from simfb) does not avoid the call on 0.3.0.
+  - **On the box, nothing answered.** WSLg's X server crash-looped (weston, a segfault in
+    `rdp-backend.so` every ~102 s, since its RDP client cannot attach on a machine used only over
+    SSH), and its X0 socket accepted and never replied. Without WSLg, the TCP fallback hung
+    instead, because WSL's mirrored networking dropped connections to closed loopback ports
+    rather than refusing them.
+  - **The fix was on the box:** WSLg off (`guiApplications=false`) and NAT networking. The
+    connection to port 6000 is then refused in 15 ms, and a boot right after restarting WSL
+    reached the home screen in 96 s.
+  - **Cloud sessions never waited.** They have no X0 socket, and their network refuses a closed
+    port.
   - **The ~33 s silences in launchd's log were not timeouts.** x86Sim's jetsam.py was killing
     daemons idle for 30 s while everything waited.
-  - **`boot` now runs x86Sim without `DISPLAY`.** The screen comes from simfb, not X. On the
-    same box, a fresh setup's first boot now takes 238 s (691 units fetched from the local disk)
-    and a later boot 109 s.
-  - Cloud sessions have no `DISPLAY`, so they never waited for this.
-  - The real fix belongs in x86Sim: iokitd should not connect to X there.
   - Hiding the untraced launchd plists (overlay whiteouts) was tried along the way and is not
     needed. The installed test app that seemed to vanish then had in fact not been installed
     since a fresh setup.

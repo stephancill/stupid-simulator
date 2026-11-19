@@ -293,10 +293,10 @@ def boot(name, metal="auto", timeout=900):
     if is_lazy(runtime):
         mount_lazy(runtime)
     env = dict(vulkan_env(metal), A64_KEEP="1")
-    # Without DISPLAY: Darling's iokitd opens an X display on its main thread before it answers any Mach message, and
-    # every guest process that touches IOKit waits for it. Under WSLg (its X server crash-looping, and mirrored
-    # networking dropping connections to closed loopback ports) that took 135-195 s of a 193-231 s boot; without
-    # DISPLAY the same boot took 95 s (x86Sim 0.3.0). The screen comes from simfb, not X.
+    # Without DISPLAY: the screen comes from simfb, not X. Darling's iokitd opens an X display on its main thread before
+    # it answers any Mach message, and every guest process that touches IOKit waits for it, so a DISPLAY whose server
+    # does not answer stalls the boot. x86Sim 0.3.0's iokitd still falls back to :0 without it (removed in 0.4.0); see
+    # docs/implementation-notes.md for the WSL 2 box where both hung.
     run_x86sim(["shell", "-c", "cli/libexec/arm64/boot-a64.sh"], device=device, env=env, unset=("DISPLAY",))
     run_x86sim(["x86sim", "wait", "home", str(timeout)], device=device)
     if not is_booted(device):
