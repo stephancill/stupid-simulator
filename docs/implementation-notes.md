@@ -110,6 +110,9 @@ the first time something opens it, so any app runs without a recorded manifest.
     part of it.
   - Safari came to the front with its start page, and Maps in 27 s with its location prompt.
   - Nothing failed to fetch, and 5.2 GB of memory was in use.
+  - With the first boot's files in the base, a second fresh session took 123 s to set up and
+    222 s to boot, fetching 7 units on the way. Settings came to the front in 13 s, Safari in 35 s
+    and Maps in 25 s, with 70 units fetched in all and none failed.
 - **A lazy machine traces without the whole runtime.** The FUSE server appends each file's first
   open to `layers/opened.txt`.
   - `trace begin` on a lazy runtime remounts it with that list emptied.
