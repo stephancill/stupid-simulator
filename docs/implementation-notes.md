@@ -3,6 +3,50 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## `--verify`: no baseline wait on a still x86Sim screen
+
+`--verify` takes three baseline frames 400 ms apart before sending the input, to learn which pixels
+were already changing (a blinking cursor). That is 0.8 s on every verified input.
+
+- **x86Sim's frame ring publishes only when the screen changes**, and stamps each frame with its
+  publish time (CLOCK_REALTIME, the slot's second u64). An idle home screen published no frame in
+  5 s (x86Sim 0.5.0, iOS 27.2).
+- **So on x86Sim a still screen is known without watching it.** `SimulatorHost.screenStillFor`
+  reads how long ago the newest frame was published; when that is 1 s or more (longer than the
+  0.8 s the baseline spans) one frame is the baseline. A second reading after copying that frame
+  falls back to the spaced baseline if a frame arrived meanwhile. Xcode's host answers nil and
+  keeps the spaced baseline.
+- **Verified on the WSL 2 box** (x86Sim 0.5.0, iOS 27.2, Settings):
+  - `tap --label General --verify`: 1.24–1.29 s, against 2.04–2.10 s with 0.8.3;
+  - a scroll with `--verify`: 0.23 s, against 1.03 s;
+  - `key left --verify` with nothing focused still exits 2 ("did not change"), in 2.9 s with
+    either build.
+- **What an agent's step costs in the cloud** (4 vCPU, a small SwiftUI test app built with
+  stupid-app, 0.8.3): the app answers a tap in 0.2–0.55 s, but `tap --label "Row 5" --verify`
+  took 2.4–2.7 s: ~1 s of `ui-tree` to find the label, the 0.8 s baseline, then the change.
+
+## How responsive the cloud device is
+
+Measured in fresh Claude Code cloud sessions (4 vCPU, 16 GB, x86Sim 0.5.0, iOS 27.2, 0.8.3), from
+the frame ring: the time from an input command starting to the first visible change, and to the
+screen settling. Medians of 5–6 inputs.
+
+| | Settings (iPhone 17 Pro) | small SwiftUI app |
+|---|---|---|
+| tap that pushes a page | 1.4–1.8 s / 2.1–2.3 s | 0.55 s / 1.32 s |
+| tap that changes a row in place | | 0.20 s |
+| edge swipe back | 0.5–0.7 s / 1.3–1.6 s | 0.49 s / 1.14 s |
+| frames/s while animating | 7–12 | 12.5 |
+
+- **Settings is heavy**: its own translated code and Metal on lavapipe (`mtlvk`) took ~16 CPU s
+  each over ten navigations, with 2.6 of 4 cores busy; each frame waited 170–205 ms on lavapipe.
+- **Things that did not help**: `--metal software` (19 frames/s but taps 2.3 s and more CPU);
+  Reduce Motion (no change); a 3x smaller screen (iPhone SE: 28 frames/s and 49 ms a frame, but a
+  tap in Settings still took 1.2 s). The tap delay in Settings is mostly the app's translated code.
+- `x86sim-aot update` fails after 19 s ("VectorKit: constant pool conflict at 0x20"), so the
+  precompiled image's 49–67 stale chunks (SpringBoard and Foundation among them) cannot be
+  rebuilt here.
+
 ## Linux boots: no fixed 90 s wait
 
 Every Linux boot took 96–100 s: a first boot, a reboot, one with the page cache dropped, and one
