@@ -3,6 +3,13 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## Unreleased
+
+- `--verify` no longer gives up at once on a screen that is still moving, such as the keyboard
+  sliding up after a tap on a text field. It waits up to 5 s for the screen to settle before sending
+  the input; `type --verify` straight after focusing a field used to exit 3 and type nothing. When
+  it does give up, it now says that nothing was sent.
+
 ## 0.8.4
 
 - `--verify` on Linux no longer waits 0.8 s before every input when the screen is still. x86Sim

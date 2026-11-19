@@ -29,6 +29,9 @@ struct Verification: ParsableArguments {
     /// How long a screen still moving before the input is watched for it to settle.
     static let settleLimit: TimeInterval = 5
     static let settleRetrySpacing: Duration = .milliseconds(200)
+    /// Settled, after the screen was seen moving: fewer than 1 pixel in this many changing across the
+    /// baseline. A blinking cursor is far less (about 0.01% of an iPhone 17 Pro's screen).
+    static let settledFraction = 100
     /// Between frames after the input, so a host that reads frames instantly is not polled flat out.
     private static let pollSpacing: Duration = .milliseconds(50)
 
@@ -44,24 +47,29 @@ struct Verification: ParsableArguments {
             return
         }
         let host = try SimulatorHosts.current()
-        // A screen still moving (an on-screen keyboard sliding up after a text field took focus took
-        // about 4 s, x86Sim 0.5.0, iOS 27.2) is watched again until it settles, for up to
-        // `settleLimit`, rather than given up on at once. Nothing is sent until the baseline holds.
+        // A screen moving too much to tell (an on-screen keyboard sliding up after a text field took
+        // focus, which took about 4 s, x86Sim 0.5.0, iOS 27.2) is watched again until it has settled,
+        // for up to `settleLimit`, rather than given up on at once. Settled means hardly anything
+        // still changes, not merely under the first baseline's bar: input sent while an animation
+        // was winding down passed --verify on the animation's own frames (a slow drag, x86Sim 0.5.0).
+        // Nothing is sent until the baseline holds.
         let settleDeadline = Date().addingTimeInterval(Self.settleLimit)
         var watched: (before: ScreenFrame, noise: [Bool])?
         var problem = ""
+        var settling = false
         while true {
             let baseline = try await self.baseline(host, udid)
             if let noise = ScreenChange.noise(in: baseline), let before = baseline.last {
                 let noisy = noise.lazy.filter { $0 }.count
-                if noisy * 4 < noise.count {
+                if settling ? noisy * Self.settledFraction < noise.count : noisy * 4 < noise.count {
                     watched = (before, noise)
                     break
                 }
-                problem = "\(noisy) of \(noise.count) pixels were already changing"
+                problem = "\(noisy) of \(noise.count) pixels were still changing"
             } else {
                 problem = "the screen turned while it was being watched"
             }
+            settling = true
             if Date() >= settleDeadline { break }
             try await Task.sleep(for: Self.settleRetrySpacing)
         }
