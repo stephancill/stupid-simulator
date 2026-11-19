@@ -27,6 +27,18 @@ with the `minimal` feature preset. That was a fixed wait, not boot work.
 - **A reboot with a dropped page cache took as long as a first boot** (98 s against 99 s, before
   the fix). So a session that resumes a snapshot of a machine that has already booted once would
   probably not boot faster than a first boot does.
+- **How responsive a booted device is** (same kind of session, measured from the frame ring after
+  each input; times from when the command started):
+  - a tap shows on screen after 1.1–2.2 s: opening Settings, or pushing General. The command
+    itself returns in ~0.15 s;
+  - an edge swipe back shows after 1.1–1.7 s, a scroll after 0.2–0.9 s;
+  - animations publish 6–18 frames/s, and an idle screen publishes none (frames are sent on change);
+  - `ui-tree` takes ~1 s (1.4 s the first time), `screenshot` 0.26 s;
+  - `tap --label General --verify` takes 4.9 s in all (the tree lookup, the tap, then waiting for
+    the change), and `type abc --verify` 4.1 s.
+
+  So it is not realtime. It suits an agent, which waits with `--verify`, but a person would see
+  each input land a second or two late, with choppy animation.
 - **Where the CPU goes in a boot:** SpringBoard (~17 CPU s), x86Sim's Python helpers (~16), mtlvk
   (~13, Metal on lavapipe) and darlingserver (~5). Nothing else used more than 3.
 
