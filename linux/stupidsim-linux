@@ -864,6 +864,12 @@ class LazyRuntime:
         self.units_lock = threading.Lock()
         self.log_lock = threading.Lock()
         self.fetched_units = set()
+        # The index never changes while mounted, so each entry and each directory's names are queried once. libfuse 3.14's
+        # high-level API cannot ask the kernel to cache directory listings (fuse_lib_opendir drops cache_readdir), and
+        # overlayfs keeps a merged directory's listing only while it is open, so every opendir of a directory in the
+        # runtime came here: 38,101 readdirs (32.6 s of handler time) in a 60 s cloud boot. A plain dict is safe on
+        # libfuse's threads (the GIL); two threads missing at once only query twice.
+        self.entry_cache, self.names_cache = {}, {}
         # Every file opened through this server, once each, in order: a trace (see trace_begin) that needs no whole runtime.
         self.opened, self.opened_file = set(), open(os.path.join(self.layers, "opened.txt"), "a", buffering=1)
         # STUPIDSIM_LAZY_STATS=1: every 30 s, log how many calls of each kind the server answered and their time
@@ -880,12 +886,19 @@ class LazyRuntime:
             print(f"{time.strftime('%H:%M:%S')} {message}", flush=True)
 
     def entry(self, path):
+        try:
+            return self.entry_cache[path]
+        except KeyError:
+            pass
         rel = path.decode().lstrip("/")
         if not rel:
-            return ("d", 0o755, 0, 0, None, None)
-        parent, name = os.path.split(rel)
-        return self.db().execute("SELECT kind, mode, size, mtime_ns, unit, target FROM entries WHERE parent = ? AND name = ?",
-                                 (parent, name)).fetchone()
+            found = ("d", 0o755, 0, 0, None, None)
+        else:
+            parent, name = os.path.split(rel)
+            found = self.db().execute("SELECT kind, mode, size, mtime_ns, unit, target FROM entries WHERE parent = ? AND name = ?",
+                                      (parent, name)).fetchone()
+        self.entry_cache[path] = found
+        return found
 
     def guarded(self, fn):
         stats = self.stats
@@ -941,10 +954,13 @@ class LazyRuntime:
             return -errno.ENOENT
         if e[0] != "d":
             return -errno.ENOTDIR
-        for name in (".", ".."):
-            filler(buf, name.encode(), None, 0, 0)
-        for (name,) in self.db().execute("SELECT name FROM entries WHERE parent = ?", (rel,)):
-            if filler(buf, name.encode(), None, 0, 0):
+        names = self.names_cache.get(path)
+        if names is None:
+            names = [b".", b".."] + [name.encode() for (name,) in
+                                     self.db().execute("SELECT name FROM entries WHERE parent = ?", (rel,))]
+            self.names_cache[path] = names
+        for name in names:
+            if filler(buf, name, None, 0, 0):
                 break
         return 0
 
