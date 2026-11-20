@@ -63,6 +63,7 @@ and the iOS 27.2 runtime (24B8117) on Ubuntu 24.04.
 import argparse
 import concurrent.futures
 import errno
+import fcntl
 import functools
 import hashlib
 import json
@@ -283,6 +284,16 @@ def boot(name, metal="auto", timeout=900):
     device = device_dir(name)
     if not os.path.isdir(device):
         fail(f"no device {name} at {device}")
+    # One boot of a device at a time: an agent can start a boot in the background while it builds, and
+    # `stupid-app run --simulator` then boots the same device when the build is done. A second boot-a64.sh on a
+    # booting device would start it again, so a boot that finds another one running waits for it, then boots only
+    # if that one did not get the device up. The lock is released when the process exits, however it exits.
+    lock = open(os.path.join(os.path.dirname(device), f".{os.path.basename(device)}.boot.lock"), "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        log(f"{name} is being booted by another process; waiting for it")
+        fcntl.flock(lock, fcntl.LOCK_EX)
     if is_booted(device):
         log(f"{name} is already booted")
         return
