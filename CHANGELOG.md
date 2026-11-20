@@ -3,6 +3,15 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## 0.8.6
+
+- On Linux, `stupidsim-linux boot` waits for a boot of the same device that is already running
+  instead of starting the device a second time. An agent can start a boot in the background while
+  it builds, and `stupid-app run --simulator` then boots the same device when its build is done.
+- The Linux runtime's file server keeps file entries and directory listings in memory once read.
+  It answered tens of thousands of directory listings per boot with a database query each; in a
+  4-vCPU cloud session its CPU use roughly halves, which leaves more for the simulator.
+
 ## 0.8.5
 
 - On Linux, `ui-tree`, `tap --label`, hit tests and notification banners are about three times
