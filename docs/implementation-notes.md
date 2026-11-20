@@ -3,6 +3,24 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## The lazy runtime's server keeps entries and directory listings
+
+- **What it fixes.** In a Claude Code cloud session (4 vCPU, kernel 6.18, libfuse 3.14) the Python
+  FUSE server was the busiest process: 17 CPU s during a 60 s boot and 29 by the end of the first
+  app run, more than SpringBoard. `STUPIDSIM_LAZY_STATS=1` showed why: 38,101 `readdir` calls in
+  the boot (32.6 s of handler time) and 62,660 by the end of the run, each one a SQLite query.
+  libfuse 3.14's high-level API cannot let the kernel cache listings (`fuse_lib_opendir` drops the
+  `cache_readdir` flag), and overlayfs keeps a merged directory's listing only while it is open, so
+  every `opendir` of a runtime directory reached the server.
+- **The change.** The index never changes while mounted, so `LazyRuntime` keeps each entry and each
+  directory's names in a dict after the first query.
+- **Measured** in the same kind of session: `readdir` handler time in the boot 32.6 -> 5.8 s, the
+  server's CPU 17 -> 9 s for the boot and 29 -> 17 s to the end of the first run. Boot and first
+  run times did not improve beyond the variation between sessions (69 and 60 s against 60 and
+  45 s; boots have ranged 48-70 s): the server's CPU was not what the boot waited on.
+- **Left:** about 10,000 distinct `getattr` lookups (0.7 ms each, the GIL included) and `open`
+  calls that wait on unit fetches.
+
 ## One boot at a time, and what a cached cloud environment does to boot time
 
 - **`stupidsim-linux boot` waits for a boot already in progress.** An agent can start a boot in the
