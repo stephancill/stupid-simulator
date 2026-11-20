@@ -3,6 +3,39 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## One boot at a time, and what a cached cloud environment does to boot time
+
+- **`stupidsim-linux boot` waits for a boot already in progress.** An agent can start a boot in the
+  background while it builds, and `stupid-app run --simulator` then boots the same device when its
+  build is done (it sees no input socket yet). Two `boot-a64.sh` runs on one device would start it
+  twice. `boot` now takes an exclusive `flock` on `.<device dir>.boot.lock` next to the device; a
+  boot that finds it held logs that it is waiting, and once it gets the lock it returns if the
+  device is up, else boots it itself. The kernel releases the lock however the holder exits.
+  Verified in a Claude Code cloud session (4 vCPU): a background `boot` plus an immediate
+  `stupid-app run --simulator` installed and launched the test app once the background boot was
+  done, with no second boot.
+- **Booting while building saves little there.** Background boot plus `run --simulator` took 106 s
+  from the boot's start to the app on screen (the boot itself 65 s); one after the other it is
+  48-63 s plus 56-62 s. Both are CPU bound on 4 vCPUs, so each slows the other. Not worth a flag.
+- **A Claude Code environment's cached setup is slower than running setup in the session.** The
+  environment caches its setup script's result as a disk snapshot (stupid-app's setup: 136 s, so it
+  is cached, and a session then starts in about 4 s). But a restored snapshot reads each block the
+  first time at 21-56 MB/s with one reader and about 77 MB/s at best with 32, and a boot reads
+  5.2 GB: 240-256 s instead of 62 s, and the first build ~50 s slower (cold toolchain). From session
+  start to an app on screen: 4:47 without the cache, 6:38 with it.
+  - What the boot reads: 4.6 GB is x86Sim's translation cache. The first process of a layout reads
+    the whole AOT image (`.aot`, 2.16 GB) to build its relocated shared copy (`.aot.<hash>.map`,
+    1.38 GB, and `.map.idx`, 454 MB; the hash covers the image's inode and mtime, dynarmic
+    `a64_emit_x64.cpp`), and every boot copies the `.map` into a huge-page tmpfs. Then 2.0 GB of
+    runtime files (654 MB of the 2 GB dyld shared cache) and 205 MB of device data. Measured with
+    `mincore` after a cold boot (the image has no `fincore`).
+  - Booting once in the setup script (`stupidsim-linux boot; stupidsim-linux shutdown`) keeps the
+    `.map`/`.idx` and x86Sim's prefetch lists in the snapshot and fits the time limit (168 s). A
+    session that ran that setup itself then booted in 41 s with 6 MB read, but one restored from the
+    snapshot still read 3.7 GB and took 256 s: random page faults on the cold disk are slower still.
+    Reading the boot's big files first with 32 threads ran at ~38 MB/s (220 s), then a 75 s boot.
+  - So the documented path stays: run the setup script in the session.
+
 ## A guest server for the accessibility tree
 
 On Linux every `ui-tree`, `tap --label`, hit test and banner read started `stupidsim-guest` in the
