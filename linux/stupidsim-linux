@@ -6,6 +6,10 @@ machines (cloud agent sessions, CI), and records what an app needs from the iOS 
         Install x86Sim, fetch the runtime's base and the named apps' parts from the store, restore
         the translation cache and a booted-once device, boot it and wait for the home screen.
     stupidsim-linux boot [--device NAME] [--metal auto|gpu|software]
+    stupidsim-linux translator install | restore | status
+        Put x86Sim's translator with the fixes in linux/x86sim-patches (web workers, apps with crash
+        reporters) into every copy of the pinned x86Sim, or put x86Sim's own back. setup and boot install
+        it; a copy in /opt/x86sim needs root. STUPIDSIM_X86SIM_PATCHES=0 keeps x86Sim's own.
     stupidsim-linux shutdown [--device NAME]
     stupidsim-linux trace begin [--device NAME]
         Shut the device down, mark every runtime file unread, and boot it again. Then use the app.
@@ -80,6 +84,8 @@ import urllib.parse
 X86SIM_VERSION = "0.5.0"
 X86SIM_SHA256 = "4feaf1730c71fa196d5db9291950d32c3dc476c3ba2d0565aa797f9c66439bb0"
 X86SIM_URL = f"https://github.com/x86sim/x86sim/releases/download/v{X86SIM_VERSION}/x86sim-{X86SIM_VERSION}-x86_64.AppImage"
+# x86Sim's own libarm64jit.so in that release: the only file `translator install` replaces besides its own build.
+X86SIM_TRANSLATOR_SHA256 = "521377e73eede74514d91ad3e18cde2f2551bac6492174dd0ea5aaffd27b75b5"
 DEFAULT_DEVICE = "agent"
 # The store's public read-only address (the bucket behind it is served anonymously, without listing)
 PUBLIC_STORE = "https://stupidsim-store.stupidtech.net"
@@ -211,6 +217,119 @@ def ensure_darling():
     log(f"installed x86Sim's Darling {darling_id} into /opt/x86sim")
 
 
+# ---------------------------------------------------------------- the patched translator
+
+TRANSLATOR_IN_DARLING = os.path.join("libexec", "darling", "usr", "libexec", "darling", "libarm64jit.so")
+
+
+def packaged_translator():
+    """libarm64jit-<version>.so built by scripts/build-translator.sh: in the package's libexec/stupidsim beside
+    bin/stupidsim-linux, or in a checkout's build/translator."""
+    if os.environ.get("STUPIDSIM_TRANSLATOR"):
+        return os.environ["STUPIDSIM_TRANSLATOR"]
+    here = os.path.dirname(os.path.realpath(__file__))
+    name = f"libarm64jit-{X86SIM_VERSION}.so"
+    for path in (os.path.join(here, "..", "libexec", "stupidsim", name), os.path.join(here, "..", "build", "translator", name)):
+        if os.path.exists(path):
+            return os.path.normpath(path)
+    fail(f"the patched translator {name} is not installed beside stupidsim-linux (libexec/stupidsim); reinstall "
+         f"stupidsim's Linux package, build it with scripts/build-translator.sh, or set STUPIDSIM_X86SIM_PATCHES=0 to "
+         f"use x86Sim's own")
+
+
+def translator_copies():
+    """Every libarm64jit.so of the pinned x86Sim: the extracted AppImage stupidsim runs, the copies x86Sim makes in
+    its data directory (app/<version>) and the system-mode Darling in /opt/x86sim that devices load when it is
+    installed. A copy that is there is listed whether or not this user may write it."""
+    share = os.path.join(os.path.dirname(launcher()), "usr", "share", "x86sim")
+    copies = [os.path.join(share, "darling", TRANSLATOR_IN_DARLING)]
+    apps = os.path.join(x86sim_data(), "app")
+    if os.path.isdir(apps):
+        copies += [os.path.join(apps, name, "darling", TRANSLATOR_IN_DARLING) for name in sorted(os.listdir(apps))
+                   if name == X86SIM_VERSION or name.startswith(X86SIM_VERSION + "-")]
+    try:
+        with open(os.path.join(share, "DARLING_ID")) as f:
+            copies.append(os.path.join("/opt/x86sim", f"darling-{f.read().strip()}", TRANSLATOR_IN_DARLING))
+    except OSError:
+        pass
+    # Run with sudo, HOME is root's (Ubuntu's sudo sets it), so the user's x86Sim and its DARLING_ID are not found:
+    # the system-mode copies are recognised by their contents instead, x86Sim's own for this version or one that
+    # stupidsim replaced. Another x86Sim version's Darling is left out.
+    if os.path.isdir("/opt/x86sim"):
+        for name in sorted(os.listdir("/opt/x86sim")):
+            path = os.path.join("/opt/x86sim", name, TRANSLATOR_IN_DARLING)
+            if (name.startswith("darling-") and path not in copies and os.path.exists(path)
+                    and (os.path.exists(path + ".orig") or sha256_file(path) == X86SIM_TRANSLATOR_SHA256)):
+                copies.append(path)
+    return [path for path in copies if os.path.exists(path)]
+
+
+def translator_state(path, ours):
+    digest = sha256_file(path)
+    return "patched" if digest == ours else "x86sim" if digest == X86SIM_TRANSLATOR_SHA256 else "unknown"
+
+
+def translator(action, quiet=False):
+    """install: each copy that is x86Sim's own becomes the patched build, kept as libarm64jit.so.orig and replaced by
+    a rename, so a running device keeps the library it loaded until it boots again. A copy that is neither x86Sim
+    0.5.0's own nor ours is left alone and reported: it is some other build. restore puts the .orig back."""
+    if os.environ.get("STUPIDSIM_X86SIM"):
+        fail("STUPIDSIM_X86SIM names an x86Sim of your own; put a translator into it yourself (scripts/build-translator.sh)")
+    copies = translator_copies()
+    if not copies:
+        fail(f"x86Sim {X86SIM_VERSION} is not installed (run `stupidsim-linux setup`, or install.sh)")
+    if action == "restore":
+        blocked = [path for path in copies if os.path.exists(path + ".orig") and not os.access(os.path.dirname(path), os.W_OK)]
+        if blocked:
+            fail("putting x86Sim's translator back in " + ", ".join(blocked) + " needs root: run `sudo "
+                 + os.path.realpath(sys.argv[0]) + " translator restore`")
+        for path in copies:
+            if os.path.exists(path + ".orig"):
+                replace_file(path + ".orig", path)
+                log(f"x86Sim's own translator is back in {path}")
+        return
+    ours = sha256_file(packaged_translator())
+    states = {path: translator_state(path, ours) for path in copies}
+    if action == "status":
+        for path, state in states.items():
+            log({"patched": "patched  ", "x86sim": "x86Sim's ", "unknown": "unknown  "}[state] + path)
+        return
+    unknown = [path for path, state in states.items() if state == "unknown"]
+    if unknown:
+        fail("not replacing a translator that is neither x86Sim " + X86SIM_VERSION + "'s own nor stupidsim's: "
+             + ", ".join(unknown) + " (`stupidsim-linux translator restore` puts back one stupidsim replaced)")
+    todo = [path for path, state in states.items() if state == "x86sim"]
+    blocked = [path for path in todo if not os.access(os.path.dirname(path), os.W_OK)]
+    if blocked:
+        fail("x86Sim's translator in " + ", ".join(blocked) + " needs root to replace with the patched one (web "
+             "workers, apps with crash reporters): run `sudo " + os.path.realpath(sys.argv[0]) + " translator install`, "
+             "or set STUPIDSIM_X86SIM_PATCHES=0 to keep x86Sim's own")
+    for path in todo:
+        if not os.path.exists(path + ".orig"):
+            shutil.copy2(path, path + ".orig")
+        replace_file(packaged_translator(), path)
+        log(f"installed the patched translator in {path}")
+    if not todo and not quiet:
+        log("the patched translator is already installed")
+
+
+def replace_file(source, target):
+    """Copied beside the target and renamed over it, with the target's owner and mode."""
+    info = os.stat(target)
+    temporary = target + ".new"
+    shutil.copyfile(source, temporary)
+    os.chmod(temporary, stat.S_IMODE(info.st_mode))
+    if os.geteuid() == 0:
+        os.chown(temporary, info.st_uid, info.st_gid)
+    os.replace(temporary, target)
+
+
+def ensure_translator():
+    if os.environ.get("STUPIDSIM_X86SIM") or os.environ.get("STUPIDSIM_X86SIM_PATCHES") == "0":
+        return
+    translator("install", quiet=True)
+
+
 def sha256_file(path):
     digest = hashlib.sha256()
     with open(path, "rb") as f:
@@ -300,6 +419,7 @@ def boot(name, metal="auto", timeout=900):
     started = time.time()
     ensure_runtime_dir()
     ensure_darling()
+    ensure_translator()
     runtime = device_runtime(device)
     if is_lazy(runtime):
         mount_lazy(runtime)
@@ -1181,6 +1301,7 @@ def setup(apps, name, no_boot, metal, runtime=None, features="lean"):
     install_x86sim()
     ensure_darling()
     run_x86sim(["version"], capture=True)  # copies x86Sim's payload into its data directory once
+    ensure_translator()  # after that copy, so it is patched too
 
     base = f"runtimes/{runtime}"
     rdir = runtime_dir(runtime)
@@ -1275,6 +1396,8 @@ def main():
     p = commands.add_parser("boot")
     p.add_argument("--device", default=DEFAULT_DEVICE)
     p.add_argument("--metal", choices=["auto", "gpu", "lavapipe", "software"], default="auto")
+    p = commands.add_parser("translator")
+    p.add_argument("action", choices=["install", "restore", "status"])
     p = commands.add_parser("shutdown")
     p.add_argument("--device", default=DEFAULT_DEVICE)
     for command in ("mount", "unmount"):
@@ -1301,6 +1424,8 @@ def main():
         setup(a.app, a.device, a.no_boot, a.metal, a.runtime, a.features)
     elif a.command == "boot":
         boot(a.device, a.metal)
+    elif a.command == "translator":
+        translator(a.action)
     elif a.command == "shutdown":
         shutdown(a.device)
     elif a.command in ("mount", "unmount"):

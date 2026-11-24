@@ -30,6 +30,11 @@ install -d "${prefix}/bin" "${prefix}/libexec/stupidsim" "${prefix}/share/stupid
 install -m 0755 "${here}/bin/stupidsim" "${prefix}/bin/stupidsim"
 install -m 0755 "${here}/bin/stupidsim-linux" "${prefix}/bin/stupidsim-linux"
 install -m 0755 "${here}/libexec/stupidsim/stupidsim-guest" "${prefix}/libexec/stupidsim/stupidsim-guest"
+# x86Sim's translator with the fixes in share/stupidsim/x86sim-patches; `stupidsim-linux translator
+# install` puts it into x86Sim
+install -m 0755 "${here}"/libexec/stupidsim/libarm64jit-*.so "${prefix}/libexec/stupidsim/"
+install -d "${prefix}/share/stupidsim/x86sim-patches"
+install -m 0644 "${here}"/share/stupidsim/x86sim-patches/* "${prefix}/share/stupidsim/x86sim-patches/"
 install -m 0644 "${here}/share/stupidsim/version" "${prefix}/share/stupidsim/version"
 echo "installed stupidsim $(cat "${here}/share/stupidsim/version") to ${prefix}/bin/stupidsim"
 
@@ -66,7 +71,10 @@ if [ "${fetch_x86sim}" = 1 ]; then
 Next: run x86Sim once to set it up (it downloads an iOS runtime from Apple, about 8 GB) and start
 a device:
   ${target}
-Then check everything stupidsim needs with:
+Then put in x86Sim's translator with stupidsim's fixes (web workers, apps with crash reporters),
+which needs root for the copy x86Sim installs in /opt/x86sim:
+  sudo ${prefix}/bin/stupidsim-linux translator install
+and check everything stupidsim needs with:
   stupidsim doctor
 NEXT
 fi

@@ -3,6 +3,14 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## Unreleased
+
+- On Linux, web pages that start a web worker no longer crash, and apps with a crash reporter no
+  longer slow to a crawl. The Linux package now carries x86Sim's translator with two fixes from
+  agent-sim, and `stupidsim-linux setup` and `boot` put it into x86Sim. On a desktop, run
+  `sudo stupidsim-linux translator install` once after x86Sim's setup. `translator status` and
+  `translator restore` show and undo it. Boot, tree reads and taps take as long as before.
+
 ## 0.8.6
 
 - On Linux, `stupidsim-linux boot` waits for a boot of the same device that is already running

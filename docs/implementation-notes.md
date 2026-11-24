@@ -3,6 +3,59 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## Linux: x86Sim's translator with agent-sim's fixes
+
+[agent-sim](https://github.com/Developing-Gamer/agent-sim) runs the same x86Sim and found two
+translator bugs, fixed in its `patches/x86sim`. Both hit stupidsim's devices too.
+
+- **Web workers.** A local page that starts a `Worker` showed "A problem repeatedly occurred" in
+  Safari with x86Sim 0.5.0's translator, and "worker says 42" with the patched one. WebKit asks a new
+  thread's stack bounds from the thread that created it, and x86Sim described the native stack
+  rather than the guest stack the thread runs on (patch 0001).
+- **Apps with a crash reporter** slowed to a crawl: their `SIGSEGV` handler made Darling replace
+  x86Sim's fault handler, so each routine translator fault took a darlingserver round trip
+  (patch 0002). With the patched translator News opened to its welcome screen; agent-sim reports it
+  stays black without it. Not compared here, since putting x86Sim's own back needs root.
+- **What else of agent-sim's setup was tried, and left out** (WSL 2 box, x86Sim 0.5.0, warm caches):
+  - `sleepd`: agent-sim adds it back to x86Sim's `slim` job list; stupidsim boots the standard list,
+    which has it, and SpringBoard was idle at rest;
+  - `X86SIM_IO_MAX=0` (no 40 MB/s disk cap): boots took 25 s either way, and cloud sessions have no
+    systemd user manager, so the cap never applies there;
+  - Metal only for `backboardd,iconservicesagent` instead of `all`: no faster, and tree reads were
+    slower (0.72 s against 0.52 s);
+  - `GIGACAGE_ENABLED=0` for WebContent: pages already load under 0.5.0.
+- **Shipping it.** The patches live in `linux/x86sim-patches`, unchanged from agent-sim, under
+  x86Sim's GPL-3.0-or-later. `scripts/build-translator.sh` clones x86Sim's tag for the pinned
+  `X86SIM_VERSION`, applies them and builds `libarm64jit.so` (Boost headers from the system, else
+  downloaded); `scripts/build-linux.sh` packages it as `libexec/stupidsim/libarm64jit-<version>.so`
+  with the patches beside it. About 90 s from scratch on the box. The build is not byte-identical
+  across checkouts (source paths are embedded), so stupidsim recognises its own build by comparing
+  with the packaged file, not by a pinned hash.
+- **Installing it** (`stupidsim-linux translator install|restore|status`). The copies are the
+  extracted AppImage's, x86Sim's data copies (`app/<version>`), and the system-mode Darling in
+  `/opt/x86sim/darling-<id>`, which is the one devices load once it is installed. Each copy whose
+  SHA-256 is x86Sim 0.5.0's own (`X86SIM_TRANSLATOR_SHA256`) is kept as `libarm64jit.so.orig` and
+  replaced by a rename, so a running device keeps its library until it boots again; any other
+  contents fail the command rather than being overwritten. Under `sudo`, Ubuntu sets `HOME` to
+  root's, so the user's x86Sim is not found; `/opt` copies are then recognised by their contents
+  (x86Sim's own, or carrying a `.orig`). `setup` installs it after x86Sim's first run, and `boot`
+  checks it, failing with the `sudo` command when a copy needs root. `STUPIDSIM_X86SIM_PATCHES=0`
+  keeps x86Sim's own; a custom `STUPIDSIM_X86SIM` is left alone.
+- **The store needs nothing new.** x86Sim keys its translation caches by `CODEGEN_VERSION`
+  (`linux/arm64jit/jitcache.cpp`), which neither patch changes, and boots took 25 s with the patched
+  translator as before, the warm cache loading.
+- **Verified on the WSL 2 box** (i5-14600KF, x86Sim 0.5.0, iOS 27.2) with the package installed:
+  - `translator status` named all three copies, and `install` refused a translator of another build
+    and asked for root for `/opt`; as root with `HOME=/root` it put x86Sim's own back and then
+    installed the packaged one;
+  - boot 25 s, `ui-tree` 0.15 s, `tap --label General --verify` 0.89–1.02 s, as with x86Sim's own;
+  - the worker page and example.com, alternately, with the first patched build and the packaged
+    one: the worker page 8 of 8, example.com 8 of 9. The first example.com load after the first
+    worker page stayed black for over a minute, then loaded when opened again; it did not recur in
+    the next 8, and agent-sim reports Safari occasionally freezing under x86Sim too.
+- **Not verified yet:** a cloud session's `setup` with the patched package, which needs a release
+  and the store's package to be republished.
+
 ## The lazy runtime's server keeps entries and directory listings
 
 - **What it fixes.** In a Claude Code cloud session (4 vCPU, kernel 6.18, libfuse 3.14) the Python

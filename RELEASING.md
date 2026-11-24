@@ -57,8 +57,8 @@ Sparkle key pair, a feed repository served over HTTPS, and the Sparkle steps bel
    printing what Gatekeeper and `stapler validate` make of both. Both notarizations must say
    `status: Accepted`; it takes a few minutes. Logs are saved under `build/notarization/`.
 
-   Then build the Linux command line on an x86-64 Linux machine (Swift 6.2+, `zlib1g-dev`) from the
-   same commit, and copy `dist/stupidsim-<version>-linux-x86_64.tar.gz` and its `.sha256` into
+   Then build the Linux command line on an x86-64 Linux machine (Swift 6.2+, `zlib1g-dev`, and
+   clang, cmake and ninja for the patched x86Sim translator) from the same commit, and copy `dist/stupidsim-<version>-linux-x86_64.tar.gz` and its `.sha256` into
    `build/`:
 
    ```sh

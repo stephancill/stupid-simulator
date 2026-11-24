@@ -79,6 +79,13 @@ checksum, and extracts it to `~/.local/share/stupidsim/x86sim`. Run
 device is named by its UDID or by its x86Sim name. `$STUPIDSIM_X86SIM` points `stupidsim` at
 another extracted copy of x86Sim (its `AppRun`).
 
+The package also carries x86Sim's translator with two fixes from
+[agent-sim](https://github.com/Developing-Gamer/agent-sim): without them every web page that starts
+a web worker crashes, and apps with a crash reporter run very slowly. Once x86Sim's setup has run,
+put it in with `sudo stupidsim-linux translator install` (it needs root for the copy x86Sim
+installed in `/opt/x86sim`); `translator status` shows each copy and `translator restore` puts
+x86Sim's own back. `stupidsim-linux setup` and `boot` install it themselves.
+
 #### Throwaway machines: cloud agent sessions and CI
 
 Fetching and unpacking an iOS runtime from Apple, then booting a new device, takes about 20
@@ -295,8 +302,9 @@ Use `scripts/build.sh` rather than `swift build` directly: SwiftPM records the d
 the linked SDK version, and AppKit then gives the window its pre macOS 26 appearance. Tests that
 need a booted simulator are gated behind `ODH_INTEGRATION=1` and skip otherwise.
 
-On Linux, with Swift 6.2 or newer and zlib's headers (`zlib1g-dev`), `scripts/build-linux.sh` builds
-the command line and packages it as `dist/stupidsim-<version>-linux-x86_64.tar.gz`. The helper it
+On Linux, with Swift 6.2 or newer, zlib's headers (`zlib1g-dev`), and clang, cmake and ninja,
+`scripts/build-linux.sh` builds the command line and the patched x86Sim translator
+(`scripts/build-translator.sh`) and packages them as `dist/stupidsim-<version>-linux-x86_64.tar.gz`. The helper it
 runs inside x86Sim's devices, `guest/bin/stupidsim-guest`, is an iOS simulator program and is built
 on a Mac with `scripts/build-guest.sh`.
 

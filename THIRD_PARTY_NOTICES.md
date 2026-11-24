@@ -62,6 +62,19 @@ reads from a Unix socket, and the layout of the shared-memory frame ring its sim
 installer downloads x86Sim's AppImage from its GitHub release and checks it against the published
 checksum; it is not redistributed.
 
+The one exception is x86Sim's ARM translator, `libarm64jit.so`. The Linux package ships a build of
+it, `libexec/stupidsim/libarm64jit-<x86Sim version>.so`, made by `scripts/build-translator.sh` from
+x86Sim's tagged source with the patches in `linux/x86sim-patches` (also in the package, under
+`share/stupidsim/x86sim-patches`). That library and those patches are under x86Sim's license,
+GPL-3.0-or-later; its complete source is x86Sim's tag plus the patches. `stupidsim-linux translator`
+puts it into an installed x86Sim; stupidsim never links it.
+
+### agent-sim
+
+https://github.com/Developing-Gamer/agent-sim, Apache-2.0 for agent-sim itself. The two patches in
+`linux/x86sim-patches` are agent-sim's `patches/x86sim`, unchanged, which agent-sim licenses under
+x86Sim's GPL-3.0-or-later.
+
 ## Dependencies
 
 ### swift-argument-parser
