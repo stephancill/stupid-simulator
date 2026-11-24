@@ -3,7 +3,7 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
-## Unreleased
+## 0.8.8
 
 - On Linux, `ui-tree`, `tap --label` and `wait` now reach web pages: the tree lists the page an app
   shows (Safari, a WKWebView) after the app's own elements, with its links, headings, text and
