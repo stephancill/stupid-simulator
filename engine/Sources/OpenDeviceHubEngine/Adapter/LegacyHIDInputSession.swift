@@ -15,11 +15,13 @@ final class LegacyHIDInputSession: InputSession, @unchecked Sendable {
     private let buildMouseMessage: IndigoHID.MouseMessageBuilder
     private let buildButtonMessage: IndigoHID.ButtonMessageBuilder
     private let buildArbitraryMessage: IndigoHID.ArbitraryMessageBuilder
+    /// Set for an Apple TV, whose keys and buttons travel a different path; see `IndigoHID.TV`.
+    private let buildTVKeyMessage: IndigoHID.KeyboardMessageBuilder?
     private let queue = DispatchQueue(label: "\(Brand.identifierPrefix).hid")
     private let lock = NSLock()
     private var isClosed = false
 
-    init(device: any ODHSimDevice, simulatorKit: LoadedFramework) throws {
+    init(device: any ODHSimDevice, simulatorKit: LoadedFramework, isTV: Bool) throws {
         guard let symbol = simulatorKit.symbol(named: IndigoHID.mouseBuilderSymbol) else {
             throw EngineError.symbolNotFound(
                 name: IndigoHID.mouseBuilderSymbol,
@@ -37,6 +39,18 @@ final class LegacyHIDInputSession: InputSession, @unchecked Sendable {
         }
         buildButtonMessage = unsafeBitCast(buttonSymbol, to: IndigoHID.ButtonMessageBuilder.self)
         buildArbitraryMessage = unsafeBitCast(arbitrarySymbol, to: IndigoHID.ArbitraryMessageBuilder.self)
+
+        if isTV {
+            guard let keyboardSymbol = simulatorKit.symbol(named: IndigoHID.TV.keyboardBuilderSymbol) else {
+                throw EngineError.symbolNotFound(
+                    name: IndigoHID.TV.keyboardBuilderSymbol,
+                    framework: PrivateFramework.simulatorKit.rawValue
+                )
+            }
+            buildTVKeyMessage = unsafeBitCast(keyboardSymbol, to: IndigoHID.KeyboardMessageBuilder.self)
+        } else {
+            buildTVKeyMessage = nil
+        }
 
         guard let clientClass = NSClassFromString("SimulatorKit.SimDeviceLegacyHIDClient") else {
             throw EngineError.symbolNotFound(
@@ -99,6 +113,14 @@ final class LegacyHIDInputSession: InputSession, @unchecked Sendable {
     }
 
     func touch(_ event: TouchEvent) async throws {
+        // Refused before anything is sent: a contact would crash the guest's backboardd.
+        guard buildTVKeyMessage == nil else {
+            throw EngineError.unsupportedOnDevice(
+                what: "Touch input",
+                device: "Apple TV, which has no touchscreen",
+                instead: "Use `stupidsim remote` to move focus and select."
+            )
+        }
         guard (1...2).contains(event.points.count) else {
             throw EngineError.capabilityUnavailable(
                 name: "\(event.points.count) contacts, one or two are supported"
@@ -158,6 +180,16 @@ final class LegacyHIDInputSession: InputSession, @unchecked Sendable {
 
     func key(_ event: KeyEvent) async throws {
         try ensureOpen()
+        if let buildTVKeyMessage {
+            guard let message = buildTVKeyMessage(event.usage, event.phase == .down) else {
+                throw EngineError.privateCall(
+                    symbol: IndigoHID.TV.keyboardBuilderSymbol,
+                    message: "returned nil for usage \(event.usage)"
+                )
+            }
+            try await send(message)
+            return
+        }
         guard let message = buildArbitraryMessage(
             Int32(IndigoHID.touchTarget),
             IndigoHID.keyboardUsagePage,
@@ -177,7 +209,22 @@ final class LegacyHIDInputSession: InputSession, @unchecked Sendable {
         let direction = phase == .down ? IndigoHID.buttonDown : IndigoHID.buttonUp
 
         let message: UnsafeMutableRawPointer?
-        if let source = IndigoHID.Button.eventSources[button] {
+        if buildTVKeyMessage != nil {
+            switch button {
+            case .home:
+                message = buildButtonMessage(IndigoHID.TV.homeEventSource, direction, IndigoHID.TV.target)
+            case .playPause:
+                message = buildArbitraryMessage(
+                    IndigoHID.TV.target, IndigoHID.consumerUsagePage, IndigoHID.TV.playPauseUsage, direction
+                )
+            default:
+                throw EngineError.unsupportedOnDevice(
+                    what: "The \(button) button",
+                    device: "Apple TV",
+                    instead: "Its remote has home and play-pause; see `stupidsim remote`."
+                )
+            }
+        } else if let source = IndigoHID.Button.eventSources[button] {
             message = buildButtonMessage(source, direction, IndigoHID.buttonTarget)
         } else if let usage = IndigoHID.Button.consumerUsages[button] {
             message = buildArbitraryMessage(

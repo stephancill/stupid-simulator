@@ -238,10 +238,11 @@ or pasteboard sync has overwritten it.
 | `paste` | `echo hello \| stupidsim paste A1B2C3D4` |
 | `copy` | `stupidsim copy A1B2C3D4` |
 | `button` | `stupidsim button A1B2C3D4 home` |
+| `remote` | `stupidsim remote A1B2C3D4 down down select` (Apple TV: up, down, left, right, select, menu, home, play-pause) |
 | `rotate` | `stupidsim rotate A1B2C3D4 landscapeLeft` |
 | `home-swipe` | `stupidsim home-swipe A1B2C3D4` |
 | `app-switcher` | `stupidsim app-switcher A1B2C3D4` |
-| `ui-tree` | `stupidsim ui-tree A1B2C3D4 --labelled`, `--springboard` or `--at 0.88,0.93` |
+| `ui-tree` | `stupidsim ui-tree A1B2C3D4 --labelled`, `--springboard`, `--at 0.88,0.93`, `--app com.example.app` or `--focused` |
 | `screenshot` | `stupidsim screenshot booted screen.png` |
 
 </details>
@@ -251,7 +252,10 @@ or pasteboard sync has overwritten it.
   reach it. Use Fit.
 - **The compact layout below 340 points wide** is written and unit tested but has never been used by
   hand.
-- **Other Apple platforms**: tvOS, watchOS and visionOS simulators are not supported.
+- **Other Apple platforms**: Apple TV simulators work from the command line only. `remote`,
+  `type`, `key`, `screenshot` and `--verify` work, but `ui-tree` needs `--app` and shows only the
+  focused element (or the one at `--at`), and touch commands are refused. The viewer does not show
+  them. watchOS and visionOS simulators are not supported.
 - **On Linux**, `notification expand` and `reply` are refused, a push that would run a Notification
   Service Extension needs `--skip-service-extension`, the viewer is x86Sim's, and `list --source` and
   the window options of `view` are Mac only.

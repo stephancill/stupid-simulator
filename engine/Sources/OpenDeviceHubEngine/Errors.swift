@@ -7,6 +7,9 @@ public enum EngineError: Error, Sendable, Hashable {
     case frameworkNotFound(name: String, searched: [String])
     case symbolNotFound(name: String, framework: String)
     case capabilityUnavailable(name: String)
+    /// Something the device itself cannot do, such as a touch on an Apple TV, as opposed to a
+    /// private API this Xcode lacks.
+    case unsupportedOnDevice(what: String, device: String, instead: String?)
     case inputSessionClosed
     case deviceNotFound(udid: String)
     case deviceNotBooted(udid: String)
@@ -27,6 +30,8 @@ extension EngineError: LocalizedError {
             return "\(name) was not found. Searched: \(searched.joined(separator: ", "))"
         case .symbolNotFound(let name, let framework):
             return "\(name) was not found in \(framework) on this Xcode build."
+        case .unsupportedOnDevice(let what, let device, let instead):
+            return "\(what) is not supported on \(device).\(instead.map { " \($0)" } ?? "")"
         case .inputSessionClosed:
             return "The input session is closed."
         case .capabilityUnavailable(let name):

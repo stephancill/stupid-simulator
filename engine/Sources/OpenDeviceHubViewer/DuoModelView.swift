@@ -950,6 +950,7 @@ public final class DuoModelView: SCNView {
         case .actionButton: "button.horizontal"
         case .cameraControl: "camera"
         case .softwareKeyboard: "keyboard"
+        case .playPause: "playpause"
         }
     }
 
@@ -963,6 +964,7 @@ public final class DuoModelView: SCNView {
         case .actionButton: "Action Button"
         case .cameraControl: "Camera Control"
         case .softwareKeyboard: "Software Keyboard"
+        case .playPause: "Play/Pause"
         }
     }
 

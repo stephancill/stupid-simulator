@@ -25,6 +25,9 @@ public struct XcodeSimulatorHost: SimulatorHost {
     }
 
     public func orientation(_ udid: String) async throws -> DeviceOrientation {
+        // A TV does not rotate and has no integrated display for the report to describe; its
+        // frames are already in the native orientation.
+        if try isTV(udid) { return .portrait }
         let report = try await adapter.displayReport(udid)
         // Accessibility's display 0 denotes the main screen; CoreDevice uses its own display IDs.
         guard report.isSettled, let display = report.activeIntegrated,
@@ -35,10 +38,36 @@ public struct XcodeSimulatorHost: SimulatorHost {
     }
 
     public func accessibilityTree(_ udid: String, springboard: Bool) throws -> AccessibilityElement {
+        // On tvOS 27.0 (24J360), Xcode 27 (27A266a), frontmostApplicationWithDisplayId answers
+        // nothing for any display id, with Settings or the home screen in front; reading a process
+        // by pid works.
+        if !springboard, try isTV(udid) {
+            throw EngineError.unsupportedOnDevice(
+                what: "Reading the app in front",
+                device: "Apple TV, where no process answers for it",
+                instead: "Name the app with --app <bundle id>."
+            )
+        }
         let target: AccessibilityTarget = springboard
             ? .process(pid: try simctl.springBoardPID(udid: udid))
             : .frontmost
         return try adapter.accessibilityTree(udid, target: target)
+    }
+
+    public func accessibilityTree(_ udid: String, app bundleID: String) throws -> AccessibilityElement {
+        try adapter.accessibilityTree(udid, target: appTarget(bundleID, udid: udid))
+    }
+
+    public func accessibilityFocusedElement(_ udid: String, app bundleID: String?) throws -> AccessibilityElement? {
+        try adapter.accessibilityFocusedElement(udid, target: bundleID.map { try appTarget($0, udid: udid) } ?? .frontmost)
+    }
+
+    public func accessibilityElement(_ udid: String, at shown: CGPoint, app bundleID: String) throws -> AccessibilityHit? {
+        try adapter.accessibilityElement(udid, at: shown, target: appTarget(bundleID, udid: udid))
+    }
+
+    private func appTarget(_ bundleID: String, udid: String) throws -> AccessibilityTarget {
+        .process(pid: try simctl.applicationPID(bundleID: bundleID, udid: udid))
     }
 
     public func accessibilityElement(_ udid: String, at shown: CGPoint) throws -> AccessibilityHit? {

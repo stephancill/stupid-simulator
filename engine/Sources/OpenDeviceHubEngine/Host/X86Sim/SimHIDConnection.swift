@@ -126,6 +126,7 @@ public final class SimHIDConnection: @unchecked Sendable {
         case .actionButton: "action"
         case .cameraControl: throw X86SimError.unsupported(what: "The Camera Control button")
         case .softwareKeyboard: throw X86SimError.unsupported(what: "Showing and hiding the software keyboard")
+        case .playPause: throw X86SimError.unsupported(what: "The Apple TV remote's Play/Pause button")
         }
     }
 

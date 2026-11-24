@@ -114,6 +114,8 @@ public enum HardwareButton: Sendable, Hashable {
     /// The Eject key, which iOS answers by showing or hiding the software keyboard while a
     /// hardware keyboard is connected. Not a button on the device, but it travels the same way.
     case softwareKeyboard
+    /// The remote's Play/Pause button. Apple TV only.
+    case playPause
 }
 
 public enum ButtonPhase: Sendable, Hashable {
@@ -224,6 +226,10 @@ public protocol SimulatorAdapter: Sendable {
     /// What is drawn on top at a point normalized to the guest's rotated screen, whichever process
     /// draws it, or nil when nothing accessible is there.
     func accessibilityElement(_ udid: String, at shown: CGPoint) throws -> AccessibilityHit?
+    /// The same hit test inside one process's tree.
+    func accessibilityElement(_ udid: String, at shown: CGPoint, target: AccessibilityTarget) throws -> AccessibilityHit?
+    /// The element with focus in the app in front or in one process, or nil when nothing has focus.
+    func accessibilityFocusedElement(_ udid: String, target: AccessibilityTarget) throws -> AccessibilityElement?
     /// The notification banner on screen, or nil when there is none.
     func notificationBanner(_ udid: String) throws -> NotificationBanner?
     /// Performs one of the banner's accessibility actions, failing when there is no banner.
@@ -278,6 +284,14 @@ extension SimulatorAdapter {
 
     public func accessibilityElement(_ udid: String, at shown: CGPoint) throws -> AccessibilityHit? {
         throw EngineError.capabilityUnavailable(name: "the accessibility tree of \(udid)")
+    }
+
+    public func accessibilityElement(_ udid: String, at shown: CGPoint, target: AccessibilityTarget) throws -> AccessibilityHit? {
+        throw EngineError.capabilityUnavailable(name: "the accessibility tree of \(udid)")
+    }
+
+    public func accessibilityFocusedElement(_ udid: String, target: AccessibilityTarget) throws -> AccessibilityElement? {
+        throw EngineError.capabilityUnavailable(name: "the focused element on \(udid)")
     }
 
     public func notificationBanner(_ udid: String) throws -> NotificationBanner? {

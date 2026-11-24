@@ -61,7 +61,9 @@ struct Doctor: ParsableCommand {
         let shown = booted.isEmpty ? Array(devices.prefix(3)) : booted
         for device in shown {
             let type = device.deviceTypeIdentifier
-            if let chrome = ChromeLocator.chrome(forDeviceType: type) {
+            if RuntimeIdentifier.isTV(device.runtimeIdentifier) {
+                print("  n/a     \(device.name): an Apple TV has no body; drive it with `stupidsim remote`")
+            } else if let chrome = ChromeLocator.chrome(forDeviceType: type) {
                 let buttons = chrome.buttons.map(\.name).joined(separator: ", ")
                 print("  ok      \(device.name): \(chrome.identifier)")
                 print("          body \(Int(chrome.insets.left))pt, buttons: \(buttons)")

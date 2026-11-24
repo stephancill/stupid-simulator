@@ -1,6 +1,6 @@
 ---
 name: stupid-simulator
-description: Drive and inspect iOS simulators on Xcode 27+ (Device Hub era) with the stupidsim CLI from stupid simulator - read the accessibility tree, tap, swipe, type (capitals and symbols), press Home/Lock, rotate, take screenshots, and verify that input actually landed with --verify. Also OCR for web content the tree cannot see, plus scripts for simulator lifecycle, app launch, permissions, push, location, appearance, status bar, logs, hang detection, app containers, accessibility audits, visual diffs, Xcode build/test and localization. Use for any iOS simulator testing, UI automation, screenshot, or debugging task, including when an app's UI must be checked after a code change.
+description: Drive and inspect iOS and Apple TV (tvOS) simulators on Xcode 27+ (Device Hub era) with the stupidsim CLI from stupid simulator - read the accessibility tree, tap, swipe, type (capitals and symbols), press Home/Lock, press Siri Remote buttons on Apple TV, rotate, take screenshots, and verify that input actually landed with --verify. Also OCR for web content the tree cannot see, plus scripts for simulator lifecycle, app launch, permissions, push, location, appearance, status bar, logs, hang detection, app containers, accessibility audits, visual diffs, Xcode build/test and localization. Use for any iOS simulator testing, UI automation, screenshot, or debugging task, including when an app's UI must be checked after a code change.
 ---
 
 # stupid simulator
@@ -144,6 +144,34 @@ stupidsim wait --label About                   # wait for the next screen instea
 | Pasteboard | `stupidsim paste <udid> 'text'` (reads it back, fails if overwritten), `stupidsim copy <udid>` |
 | Screenshot | `stupidsim screenshot <udid> [file.png]` (prints the path) |
 | Windows for people | `stupidsim view <udid>` or open the app |
+| Read one app by bundle id | `stupidsim ui-tree <udid> --app com.example.app [--focused] [--at X,Y]` |
+
+## Apple TV (tvOS)
+
+Needs a `stupidsim` built after 0.8.8. A TV has no touchscreen, so it is driven with the Siri Remote,
+and touch commands (`tap`, `swipe`, `pinch`, gestures) are refused rather than sent. Sending touch
+input crashed the TV's backboardd in older versions.
+
+```bash
+stupidsim remote <udid> up right --verify          # focus the Search tab
+stupidsim remote <udid> down                       # into the search field
+stupidsim type <udid> 'office'                     # the TV keyboard takes typed keys
+stupidsim ui-tree <udid> --app net.example.tv --focused   # what has focus now
+stupidsim remote <udid> select                     # click it; menu goes back, home is the TV button
+```
+
+- `remote` buttons are up, down, left, right, select, menu, home and play-pause, pressed in order.
+  Use `--repeat N` to press each one N times, `--press-milliseconds` (default 250) to wait after
+  each press, and `--verify`.
+- **Always pass `--app <bundle id>` to `ui-tree` on a TV.** Nothing answers for the app in front.
+  A tvOS app also lists no children to accessibility, so the tree is the app plus the element with
+  focus, marked `focused`. Read other elements with `--at x,y`, or take a `screenshot` (or OCR).
+  Navigate by moving focus and checking `--focused`, not by labels: `tap --label` and `wait` do not
+  work on a TV.
+- `screenshot`, `--verify`, `button home` and `button play-pause` work. Lock, volume and Siri are
+  refused.
+- Apps that support it can be screenshotted at specific screens without a remote by passing DEBUG
+  launch arguments through `xcrun simctl launch <udid> <bundle id> -Arg …`.
 
 ## Testing push notifications
 

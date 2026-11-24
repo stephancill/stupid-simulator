@@ -12,12 +12,12 @@ struct ODHub: AsyncParsableCommand {
             `--udid <udid>` works too.
             """,
         version: Brand.version,
-        subcommands: [Doctor.self, List.self, View.self, Tap.self, Swipe.self, Pinch.self, Type.self, Key.self, Push.self, NotificationCommand.self, Paste.self, Copy.self, Button.self, Rotate.self, HomeSwipe.self, AppSwitcher.self, UITree.self, Wait.self, Screenshot.self]
+        subcommands: [Doctor.self, List.self, View.self, Tap.self, Swipe.self, Pinch.self, Type.self, Key.self, Push.self, NotificationCommand.self, Paste.self, Copy.self, Button.self, Remote.self, Rotate.self, HomeSwipe.self, AppSwitcher.self, UITree.self, Wait.self, Screenshot.self]
     )
 
     /// The subcommands whose first positional argument is one simulator.
     static let deviceCommands: Set<String> = Set(
-        [Tap.self, Swipe.self, Pinch.self, Type.self, Key.self, Push.self, NotificationCommand.self, Paste.self, Copy.self, Button.self, Rotate.self, HomeSwipe.self, AppSwitcher.self, UITree.self, Wait.self, Screenshot.self]
+        [Tap.self, Swipe.self, Pinch.self, Type.self, Key.self, Push.self, NotificationCommand.self, Paste.self, Copy.self, Button.self, Remote.self, Rotate.self, HomeSwipe.self, AppSwitcher.self, UITree.self, Wait.self, Screenshot.self]
             .map { ($0 as any ParsableCommand.Type).configuration.commandName ?? "" }
     )
 

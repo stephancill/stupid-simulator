@@ -19,6 +19,7 @@ extension AccessibilityElement {
         if let title, title != label { parts.append("title=\"\(title)\"") }
         if let value { parts.append("value=\"\(value)\"") }
         if let identifier { parts.append("id=\(identifier)") }
+        if focused == true { parts.append("focused") }
         if let center { parts.append(String(format: "@ %.2f,%.2f", center.x, center.y)) }
         return parts.joined(separator: " ")
     }

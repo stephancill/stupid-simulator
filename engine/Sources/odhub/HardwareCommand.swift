@@ -11,6 +11,7 @@ struct Button: AsyncParsableCommand {
     enum Name: String, CaseIterable, ExpressibleByArgument {
         case home, lock, volumeUp = "volume-up", volumeDown = "volume-down", siri
         case softwareKeyboard = "software-keyboard"
+        case playPause = "play-pause"
 
         var hardware: HardwareButton {
             switch self {
@@ -20,6 +21,7 @@ struct Button: AsyncParsableCommand {
             case .volumeDown: .volumeDown
             case .siri: .siri
             case .softwareKeyboard: .softwareKeyboard
+            case .playPause: .playPause
             }
         }
     }
@@ -27,7 +29,7 @@ struct Button: AsyncParsableCommand {
     @Argument(help: ArgumentHelp(stringLiteral: DeviceArgument.help), transform: DeviceArgument.resolve)
     var udid: String
 
-    @Argument(help: "Which button: home, lock, volume-up, volume-down, siri or software-keyboard (toggles the on-screen keyboard).")
+    @Argument(help: "Which button: home, lock, volume-up, volume-down, siri, software-keyboard (toggles the on-screen keyboard) or play-pause (Apple TV). An Apple TV has only home and play-pause; see `stupidsim remote`.")
     var button: Name
 
     @Option(help: "Milliseconds to hold the button down.")

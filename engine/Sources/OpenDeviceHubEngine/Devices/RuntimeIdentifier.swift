@@ -1,11 +1,17 @@
 import Foundation
 
-enum RuntimeIdentifier {
+public enum RuntimeIdentifier {
     private static let prefix = "com.apple.CoreSimulator.SimRuntime."
+
+    /// An Apple TV, whose input, display and accessibility differ from a phone's; see
+    /// `IndigoHID.TV`.
+    public static func isTV(_ identifier: String) -> Bool {
+        identifier.hasPrefix("\(prefix)tvOS-")
+    }
 
     /// Turns `com.apple.CoreSimulator.SimRuntime.iOS-17-5` into `iOS 17.5`. Used when the runtime
     /// itself is not installed, so neither CoreSimulator nor simctl can supply its real name.
-    static func readableName(for identifier: String) -> String {
+    public static func readableName(for identifier: String) -> String {
         let trimmed = identifier.hasPrefix(prefix)
             ? String(identifier.dropFirst(prefix.count))
             : identifier

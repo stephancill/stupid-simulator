@@ -3,6 +3,19 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## Unreleased
+
+- Apple TV simulators can be driven from the command line:
+  - `stupidsim remote <udid> down down select` presses Siri Remote buttons (up, down, left, right,
+    select, menu, home, play-pause);
+  - `type` and `key` type into a focused field;
+  - `screenshot` and `--verify` work.
+- Input sent to an Apple TV used to crash its backboardd and blank the screen. Touch commands are
+  now refused with a message that points to `remote`.
+- `ui-tree --app <bundle id>` reads a running app by bundle identifier, on iOS too. On an Apple TV
+  it shows the app's focused element, marked `focused`. `ui-tree --focused` prints just that
+  element, and `--at` works together with `--app`.
+
 ## 0.8.8
 
 - On Linux, `ui-tree`, `tap --label` and `wait` now reach web pages: the tree lists the page an app

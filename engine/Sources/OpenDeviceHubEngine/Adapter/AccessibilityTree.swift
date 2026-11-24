@@ -15,6 +15,9 @@ public struct AccessibilityElement: Codable, Sendable, Hashable {
     /// In the guest's points.
     public var frame: CGRect
     public var children: [AccessibilityElement]
+    /// Set on the element that has focus, where that was asked for: on Apple TV, the one the remote
+    /// acts on.
+    public var focused: Bool? = nil
 
     /// The centre in the portrait native coordinates `tap` takes, undoing the guest's rotation.
     /// Nil for an empty frame or a centre off screen.
@@ -83,6 +86,23 @@ final class AccessibilityTreeReader: @unchecked Sendable {
             return try translator.macPlatformElement(fromTranslation: hit).map {
                 AccessibilityHit(element: try element(from: $0, token: token, depth: 0), screen: screen)
             }
+        }
+    }
+
+    /// The element with focus in the target, without its children, or nil when nothing has focus.
+    /// On tvOS 27.0 (24J360), Xcode 27 (27A266a) the app answers this while listing no children
+    /// for its root or any element, so on Apple TV it is the one element `ui-tree` can name without
+    /// a point. On iOS 27.0 an app answers nil.
+    func focusedElement() throws -> AccessibilityElement? {
+        try withRoot { [self] _, token, root in
+            let name = "accessibilityApplicationFocusedUIElement"
+            try AccessibilitySelectorCheck.require(on: root as AnyObject, selectors: [name])
+            guard let focused = (root as AnyObject).perform(NSSelectorFromString(name))?.takeUnretainedValue() else {
+                return nil
+            }
+            var element = try element(from: focused, token: token, depth: Self.maximumDepth)
+            element.focused = true
+            return element
         }
     }
 

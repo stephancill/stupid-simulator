@@ -14,6 +14,15 @@ public protocol SimulatorHost: Sendable {
     /// The app in front, or SpringBoard: notification banners, Notification Center, the lock
     /// screen and the home screen.
     func accessibilityTree(_ udid: String, springboard: Bool) throws -> AccessibilityElement
+    /// One running app's tree by bundle identifier, whether or not it is in front. The only way to
+    /// read an app on Apple TV, where nothing answers for the app in front.
+    func accessibilityTree(_ udid: String, app bundleID: String) throws -> AccessibilityElement
+    /// The element with focus in the app in front, or in a named app, or nil when nothing has focus.
+    func accessibilityFocusedElement(_ udid: String, app bundleID: String?) throws -> AccessibilityElement?
+    /// What is drawn at a point inside one named app.
+    func accessibilityElement(_ udid: String, at shown: CGPoint, app bundleID: String) throws -> AccessibilityHit?
+    /// Whether the device is an Apple TV, which is driven with the remote and read by app.
+    func isTV(_ udid: String) throws -> Bool
     /// What is drawn on top at a point normalized to the guest's rotated screen, whichever process
     /// draws it, or nil when nothing accessible is there.
     func accessibilityElement(_ udid: String, at shown: CGPoint) throws -> AccessibilityHit?
@@ -36,6 +45,25 @@ public protocol SimulatorHost: Sendable {
 
 extension SimulatorHost {
     public func screenStillFor(_ udid: String) throws -> TimeInterval? { nil }
+
+    public func accessibilityTree(_ udid: String, app bundleID: String) throws -> AccessibilityElement {
+        throw EngineError.capabilityUnavailable(name: "reading an app by bundle identifier")
+    }
+
+    public func accessibilityFocusedElement(_ udid: String, app bundleID: String?) throws -> AccessibilityElement? {
+        throw EngineError.capabilityUnavailable(name: "the focused element")
+    }
+
+    public func accessibilityElement(_ udid: String, at shown: CGPoint, app bundleID: String) throws -> AccessibilityHit? {
+        throw EngineError.capabilityUnavailable(name: "reading an app by bundle identifier")
+    }
+
+    public func isTV(_ udid: String) throws -> Bool {
+        guard let device = try devices().first(where: { $0.udid == udid }) else {
+            throw EngineError.deviceNotFound(udid: udid)
+        }
+        return RuntimeIdentifier.isTV(device.runtimeIdentifier)
+    }
 }
 
 public enum SimulatorHosts {

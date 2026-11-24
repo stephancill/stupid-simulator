@@ -87,6 +87,7 @@ public final class CoreSimulatorAdapter: SimulatorAdapter, @unchecked Sendable {
             throw EngineError.capabilityUnavailable(name: "device IO")
         }
 
+        let isTV = Self.isTV(device)
         let scale = CGFloat(device.deviceType?.mainScreenScale ?? 1)
         let mainScreenSize = device.deviceType?.mainScreenSize ?? .zero
         let ports = unsafeBitCast(io as AnyObject, to: (any ODHSimDeviceIO).self).ioPorts ?? []
@@ -113,9 +114,11 @@ public final class CoreSimulatorAdapter: SimulatorAdapter, @unchecked Sendable {
                   portState.conforms(to: stateProtocol) else { continue }
 
             // Class 1 is an external display port that stays empty while unused. A foldable reports
-            // a class 0 port per panel.
+            // a class 0 port per panel. An Apple TV has no built-in screen: its one display is the
+            // TV, a class 1 port (1920x1080 on the Apple TV 4K 1080p simulator, Xcode 27 (27A266a),
+            // tvOS 27.0), so that is the one taken there.
             let displayState = unsafeBitCast(portState, to: (any ODHSimDisplayDescriptorState).self)
-            guard displayState.displayClass == 0 else { continue }
+            guard displayState.displayClass == (isTV ? 1 : 0) else { continue }
 
             let renderable = unsafeBitCast(descriptor, to: (any ODHSimDisplayRenderable).self)
             descriptors.append(descriptor)
@@ -141,8 +144,9 @@ public final class CoreSimulatorAdapter: SimulatorAdapter, @unchecked Sendable {
                 index: indexes[position],
                 name: DevicePanel.name(at: position, of: sizes),
                 pixelSize: size,
-                // A foldable's main screen is its cover, not its largest panel.
-                isMainScreen: size == mainScreenSize,
+                // A foldable's main screen is its cover, not its largest panel. A TV's only
+                // display is its main one.
+                isMainScreen: isTV || size == mainScreenSize,
                 screenID: profile?.screenID ?? 0,
                 nativeRotation: profile?.nativeRotation ?? 0,
                 chromeIdentifier: profile?.chromeIdentifier
@@ -235,7 +239,11 @@ public final class CoreSimulatorAdapter: SimulatorAdapter, @unchecked Sendable {
             throw EngineError.deviceNotBooted(udid: udid)
         }
         let simulatorKit = try FrameworkLoader.load(.simulatorKit, from: xcode)
-        return try LegacyHIDInputSession(device: device, simulatorKit: simulatorKit)
+        return try LegacyHIDInputSession(device: device, simulatorKit: simulatorKit, isTV: Self.isTV(device))
+    }
+
+    static func isTV(_ device: any ODHSimDevice) -> Bool {
+        RuntimeIdentifier.isTV(device.runtimeIdentifier ?? "")
     }
 
     public func simulateMemoryWarning(_ udid: String) throws {
@@ -367,6 +375,14 @@ public final class CoreSimulatorAdapter: SimulatorAdapter, @unchecked Sendable {
 
     public func accessibilityElement(_ udid: String, at shown: CGPoint) throws -> AccessibilityHit? {
         try accessibilityReader(udid, target: .frontmost).element(at: shown)
+    }
+
+    public func accessibilityElement(_ udid: String, at shown: CGPoint, target: AccessibilityTarget) throws -> AccessibilityHit? {
+        try accessibilityReader(udid, target: target).element(at: shown)
+    }
+
+    public func accessibilityFocusedElement(_ udid: String, target: AccessibilityTarget) throws -> AccessibilityElement? {
+        try accessibilityReader(udid, target: target).focusedElement()
     }
 
     public func notificationBanner(_ udid: String) throws -> NotificationBanner? {

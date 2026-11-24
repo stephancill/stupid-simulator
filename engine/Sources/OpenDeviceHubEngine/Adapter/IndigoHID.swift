@@ -118,6 +118,33 @@ enum IndigoHID {
     static let buttonUp: Int32 = 2
 
     typealias ButtonMessageBuilder = @convention(c) (Int32, Int32, Int32) -> UnsafeMutableRawPointer?
+    typealias KeyboardMessageBuilder = @convention(c) (UInt32, Bool) -> UnsafeMutableRawPointer?
+
+    /// Apple TV has no touchscreen, so the touch service at `touchTarget` does not exist there. A
+    /// message addressed to it, whether a contact, a key or a button, aborts backboardd on an
+    /// assertion in `-[SimHIDVirtualServiceManager serviceForIndigoHIDData:]`, which blanks the
+    /// screen and drops the HID connection until backboardd restarts. Everything for a tvOS device
+    /// goes to the keyboard service instead. Verified on Xcode 27 (27A266a) with tvOS 27.0 (24J360).
+    enum TV {
+        /// The keyboard service, which is where `IndigoHIDMessageForKeyboardArbitrary` addresses its
+        /// own messages (0x64 at offset 0x38 of the payload it builds).
+        static let target: Int32 = 0x64
+
+        /// `IndigoHIDMessageForKeyboardArbitrary(usage, isDown)`. On iOS 27 the guest ignores what
+        /// this builds, but on tvOS 27 it is the key path that works: the arrow keys move focus,
+        /// Return selects and Escape goes back, as the Siri Remote's touch surface, click and Menu
+        /// button do.
+        static let keyboardBuilderSymbol = "IndigoHIDMessageForKeyboardArbitrary"
+
+        /// The TV (Home) button: the Home event source through the button builder, addressed to the
+        /// keyboard service. Confirmed by pressing it two screens deep in Settings and landing on
+        /// the home screen, which Menu would not do.
+        static let homeEventSource: Int32 = 0
+
+        /// Play/Pause, the consumer page usage, addressed to the keyboard service. Accepted without
+        /// disturbing backboardd; that it toggles playback is carried from the HID usage tables.
+        static let playPauseUsage: UInt32 = 0xcd
+    }
     typealias ArbitraryMessageBuilder = @convention(c) (Int32, UInt32, UInt32, Int32) -> UnsafeMutableRawPointer?
 
     /// How each hardware button reaches the guest. Every value confirmed on Xcode 26.5 (17F42).

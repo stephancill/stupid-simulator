@@ -66,7 +66,9 @@ they cost.
 
 ## Not planned
 
-- **tvOS, watchOS and visionOS.** Not out of dislike; the device shapes, input model and chrome are
-  a different project's worth of work, and doing them badly would be worse than not doing them.
+- **watchOS and visionOS, and Apple TV in the viewer.** Not out of dislike; the device shapes, input
+  model and chrome are a different project's worth of work, and doing them badly would be worse
+  than not doing them. Apple TV is driven from the command line (`stupidsim remote`), which is what
+  agents need.
 - **Physical devices.** This is a simulator tool. Xcode and Device Hub handle hardware.
 - **Anything that phones home.** No analytics, no crash reporting, no telemetry, now or later.

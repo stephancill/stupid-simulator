@@ -3,6 +3,58 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## Apple TV from the command line
+
+tvOS simulators can now be driven and read by `stupidsim`. The viewer still does not show them.
+Verified on Xcode 27 (27A266a) with an Apple TV 4K (3rd generation) 1080p device running tvOS 27.0
+(24J360). The device was a fresh clone, used for Settings and a SwiftUI app with a `TabView`,
+`.searchable` and lists.
+
+- **Why input crashed the TV.** Every phone path addresses its message to the touch service, 0x32.
+  An Apple TV has no touchscreen, so that service does not exist. backboardd aborts on an assertion
+  in `-[SimHIDVirtualServiceManager serviceForIndigoHIDData:]` (SimulatorHID), and the screen goes
+  black. The HID connection then reports "Mach port invalid, device disconnected" until backboardd
+  is back. The crash report is filed as `backboardd-*.ips` in `~/Library/Logs/DiagnosticReports`.
+- **Keys** go through `IndigoHIDMessageForKeyboardArbitrary(usage, isDown)` on a TV. It addresses
+  its own message to the keyboard service: 0x64 at payload offset 0x38, with kind 0x2710 at 0x30.
+  The guest ignores this builder on iOS 27 (see Keyboard input below), but on tvOS 27 it works:
+  - the arrow keys move focus;
+  - Return selects;
+  - Escape is Menu (back);
+  - letters type into a focused search field.
+- **Buttons** are addressed to 0x64 too:
+  - Home is the Home event source (0) through `IndigoHIDMessageForButton`. Pressed two screens deep
+    in Settings, it landed on the home screen, which Menu would not do.
+  - Play/Pause is consumer usage 0xcd through `IndigoHIDMessageForHIDArbitrary`. It is accepted
+    without disturbing backboardd; that it toggles playback was not watched.
+  - Lock, the volume keys and Siri are refused with `unsupportedOnDevice`.
+- **Touch** (`tap`, `swipe`, `pinch`, the home and app-switcher gestures) is refused before
+  anything is sent, with a new `EngineError.unsupportedOnDevice`. That error names what to use
+  instead, unlike `capabilityUnavailable`, which reads "not available on this Xcode build".
+- **`stupidsim remote`** presses Siri Remote buttons in order:
+  - up, down, left and right are the arrow keys, select is Return and menu is Escape;
+  - home and play-pause go through the buttons above;
+  - it waits `--press-milliseconds` (250) after each press, so focus animations settle.
+- **The display.** A TV's only screen is a class 1 (external) port, 1920x1080, which the main
+  screen search skipped, so `screenshot`, `--verify` and `view` found no display. On a TV that
+  port is taken and is the main screen. Orientation is fixed at the native one.
+- **Accessibility.**
+  - `frontmostApplicationWithDisplayId:` answered nothing on the TV for any display id (0 to 16,
+    100, 256, UINT32_MAX), with Settings or the home screen (HeadBoard) in front. Reading a
+    process by pid works.
+  - `ui-tree --app <bundle id>` reads an app by finding its `UIKitApplication:<bundle id>[...]` job
+    in `launchctl list`. It works on iOS too. Without `--app`, a TV says to pass it.
+  - A tvOS app's root lists no children, nor does any element's parent (`accessibilityChildren` and
+    `accessibilityChildrenInNavigationOrder` are empty). On iOS the same calls return the windows.
+  - Two reads do work on tvOS. `accessibilityApplicationFocusedUIElement` answers the element with
+    focus (on iOS it is nil). The translator's hit test answers the element at a point (about
+    0.2 s each, so a grid of them was not used to rebuild the tree).
+  - On a TV, `ui-tree --app` therefore prints the app and its focused element, marked `focused`,
+    with a note on standard error. `--focused` prints just that element, and `--at x,y` works with
+    `--app`. `AccessibilityElement.focused` is encoded only when set.
+- **`doctor`** reports a TV as having no body rather than as missing one.
+- **Checked on the iPhone simulator afterwards:** `ui-tree`, `tap --role`, `type --verify`, `key`,
+  `button home --verify` and `ui-tree --app`, all as before.
 ## Linux: web pages in the tree (`stupidsim-webax`)
 
 Neither tree listed a web page's content: on Xcode 27's iOS 27.0 simulator, Safari on example.com
@@ -1270,3 +1322,5 @@ disappear). With no text field focused it does nothing.
   `IndigoHIDMessageForMouseNSEvent` path under Xcode 27. (Baguette's IOHIDEvent digitizer path was
   tried and was not needed.)
 - Input commands without `--verify` still report success when CoreSimulator accepts the message.
+- On Apple TV, `ui-tree` shows only the focused element (or the element at a point), not the whole
+  tree; see "Apple TV from the command line". The viewer does not show TVs.

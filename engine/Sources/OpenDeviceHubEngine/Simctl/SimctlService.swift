@@ -288,6 +288,33 @@ extension SimctlService {
         return pid
     }
 
+    /// The running process of an app, from its `UIKitApplication:<bundle id>[...]` launchd job.
+    public func applicationPID(bundleID: String, udid: String) throws -> Int32 {
+        let arguments = Self.launchdJobsArguments(udid: udid)
+        let result = try ProcessRunner.run("/usr/bin/xcrun", arguments)
+        guard result.status == 0 else {
+            throw EngineError.simctl(
+                args: Array(arguments.dropFirst()),
+                code: result.status,
+                stderr: result.standardError
+            )
+        }
+        guard let pid = Self.pid(ofApplication: bundleID, inLaunchctlList: result.standardOutput) else {
+            throw EngineError.capabilityUnavailable(name: "a running process for \(bundleID) (launch it first)")
+        }
+        return pid
+    }
+
+    static func pid(ofApplication bundleID: String, inLaunchctlList output: String) -> Int32? {
+        let prefix = "UIKitApplication:\(bundleID)["
+        for line in output.split(separator: "\n") {
+            let columns = line.split(separator: "\t")
+            guard columns.count == 3, columns[2].hasPrefix(prefix), let pid = Int32(columns[0]) else { continue }
+            return pid
+        }
+        return nil
+    }
+
     /// `launchctl list` prints `PID<tab>Status<tab>Label`, with `-` for a job that is not running.
     static func pid(ofJob label: String, inLaunchctlList output: String) -> Int32? {
         for line in output.split(separator: "\n") {
