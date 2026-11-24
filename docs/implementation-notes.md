@@ -123,17 +123,31 @@ translator bugs, fixed in its `patches/x86sim`. Both hit stupidsim's devices too
     Start Page and the page was never requested, from `127.0.0.1` or the machine's own address,
     while the host fetched it (HTTP 200). The same `openurl` loads pages on the WSL 2 box, so this
     is something about Safari or the network in a fresh cloud device, not the translator.
-- **Why a cloud device reaches no server** (three more cloud runs). `openurl` is delivered
-  (x86Sim's openurl log: `-> com.apple.mobilesafari: ok`), and typing the address works too: the
-  address field shows it. But no request ever arrives, for `127.0.0.1` or the VM's own address,
-  with the sandbox's proxy variables kept or unset at boot. The device's processes share the
-  host's network namespace. Traced with `strace` while Safari loaded the page, WebKit's networking
-  process opened netlink route sockets and UDP sockets (interface and route probing) and never
-  called `connect()` on an IP socket. So iOS's networking decides there is no usable network
-  before trying: what Darling reports about interfaces or routes on that VM (Firecracker, kernel
-  6.18.44, `eth0` 192.0.2.2/24 with a default route) differs from the WSL 2 box, where the same
-  build connects. Not resolved; the device's own log for the networking process (nw_path) is the
-  next thing to read.
+- **Why a cloud device reaches no server.** Earlier runs that typed the address into Safari, and a
+  conclusion drawn from them (that iOS never even connects), were wrong: `tap` on the address field,
+  `type` and `key return` fill the field but never submit it, on the WSL 2 box too. With `x86sim
+  openurl`, which does navigate, and x86Sim's diagnostic shims (`X86SIM_INSERT=
+  host/simshim/diag/arm64/liboslogdiag.dylib` with `data/oslog.filter` naming
+  `com.apple.WebKit.Networking`), on the cloud VM (Firecracker, kernel 6.18.44, 4 vCPU):
+  - Network.framework's path is satisfied (on `eth0`, and on `lo` for 127.0.0.1), as on the box;
+  - the networking process calls `connect()` on 127.0.0.1, which returns 0, and the connection
+    reaches `ready`; `ss` showed it established between WebKit's networking process and the server;
+  - the server then received nothing: a listener that logs each accept timed out after 10 s with
+    no byte, WebKit reconnected and stalled again. On the box the 480-byte GET follows 0.45 s after
+    connecting;
+  - traced, the box's connecting thread reads `TCP_INFO` (state established) three times, then
+    `SO_TYPE`, then `sendmsg` with the request. In the cloud `TCP_INFO` reads the same, the
+    statistics reads that follow a send on the box come at once, and no `sendmsg` ever happens:
+    the send waits for a wakeup that never comes;
+  - not the 4 CPUs: the box pinned to 2 cores sent every request (11 connections) when nothing was
+    tracing it; it stalled once only with `strace` attached;
+  - no seccomp filter, and no network call fails. The calls that fail only in the cloud are
+    `SIOCGIWNAME` (ENOTTY) and `TCP_INFO` (EOPNOTSUPP) on UDP probe sockets, `PR_SET_VMA_ANON_NAME`
+    (EINVAL, the translator naming its memory) and more of a `futex` EINVAL the box also has.
+  Unresolved. The send is gated on an event from Darling's kqueue emulation
+  (`darling-libkqueue/src/linux/socket.c`, `EVFILT_SOCK`, and the write filter), so the next step is
+  a Darling build that logs those knotes, or an x86Sim issue with this reproduction. Scripts:
+  `net-accept.sh`, `net-strace2.sh`, `net-errs2.sh`, `net-race.sh` (kept with the handover notes).
 
 ## The lazy runtime's server keeps entries and directory listings
 
