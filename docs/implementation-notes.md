@@ -65,8 +65,16 @@ translator bugs, fixed in its `patches/x86sim`. Both hit stupidsim's devices too
     one: the worker page 8 of 8, example.com 8 of 9. The first example.com load after the first
     worker page stayed black for over a minute, then loaded when opened again; it did not recur in
     the next 8, and agent-sim reports Safari occasionally freezing under x86Sim too.
-- **Not verified yet:** a cloud session's `setup` with the patched package, which needs a release
-  and the store's package to be republished.
+- **In fresh Claude Code cloud sessions with 0.8.7 from the store** (three runs, 4 vCPU):
+  - setup (37–99 s) installed the patched translator in the extracted AppImage, and the Darling it
+    then put into `/opt/x86sim` carried it: `translator status` read "patched" for both;
+  - boot 50–71 s, `ui-tree` 0.18–0.35 s after the first read, `tap --label General --verify`
+    2.5–3.2 s (one run's first tap exited 2), and News opened to its welcome screen;
+  - the worker page could not be tried there: `x86sim openurl` brought Safari to the front on its
+    Start Page and the page was never requested, from `127.0.0.1` or the machine's own address,
+    while the host fetched it (HTTP 200). The same `openurl` loads pages on the WSL 2 box, so this
+    is something about Safari or the network in a fresh cloud device, not the translator; not
+    looked into yet.
 
 ## The lazy runtime's server keeps entries and directory listings
 
