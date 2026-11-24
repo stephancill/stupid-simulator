@@ -144,7 +144,9 @@ translator bugs, fixed in its `patches/x86sim`. Both hit stupidsim's devices too
   - no seccomp filter, and no network call fails. The calls that fail only in the cloud are
     `SIOCGIWNAME` (ENOTTY) and `TCP_INFO` (EOPNOTSUPP) on UDP probe sockets, `PR_SET_VMA_ANON_NAME`
     (EINVAL, the translator naming its memory) and more of a `futex` EINVAL the box also has.
-  Unresolved. The send is gated on an event from Darling's kqueue emulation
+  It happens with x86Sim's own translator too (a fresh VM with the stock 0.5.0 `libarm64jit.so`).
+  Reported as https://github.com/x86sim/x86sim/issues/23. Unresolved. The send is gated on an event
+  from Darling's kqueue emulation
   (`darling-libkqueue/src/linux/socket.c`, `EVFILT_SOCK`, and the write filter), so the next step is
   a Darling build that logs those knotes, or an x86Sim issue with this reproduction. Scripts:
   `net-accept.sh`, `net-strace2.sh`, `net-errs2.sh`, `net-race.sh` (kept with the handover notes).
