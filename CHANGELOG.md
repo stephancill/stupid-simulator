@@ -3,7 +3,7 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
-## Unreleased
+## 0.8.7
 
 - On Linux, web pages that start a web worker no longer crash, and apps with a crash reporter no
   longer slow to a crawl. The Linux package now carries x86Sim's translator with two fixes from
