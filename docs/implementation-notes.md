@@ -122,8 +122,18 @@ translator bugs, fixed in its `patches/x86sim`. Both hit stupidsim's devices too
   - the worker page could not be tried there: `x86sim openurl` brought Safari to the front on its
     Start Page and the page was never requested, from `127.0.0.1` or the machine's own address,
     while the host fetched it (HTTP 200). The same `openurl` loads pages on the WSL 2 box, so this
-    is something about Safari or the network in a fresh cloud device, not the translator; not
-    looked into yet.
+    is something about Safari or the network in a fresh cloud device, not the translator.
+- **Why a cloud device reaches no server** (three more cloud runs). `openurl` is delivered
+  (x86Sim's openurl log: `-> com.apple.mobilesafari: ok`), and typing the address works too: the
+  address field shows it. But no request ever arrives, for `127.0.0.1` or the VM's own address,
+  with the sandbox's proxy variables kept or unset at boot. The device's processes share the
+  host's network namespace. Traced with `strace` while Safari loaded the page, WebKit's networking
+  process opened netlink route sockets and UDP sockets (interface and route probing) and never
+  called `connect()` on an IP socket. So iOS's networking decides there is no usable network
+  before trying: what Darling reports about interfaces or routes on that VM (Firecracker, kernel
+  6.18.44, `eth0` 192.0.2.2/24 with a default route) differs from the WSL 2 box, where the same
+  build connects. Not resolved; the device's own log for the networking process (nw_path) is the
+  next thing to read.
 
 ## The lazy runtime's server keeps entries and directory listings
 
