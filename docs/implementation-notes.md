@@ -38,9 +38,21 @@ translator bugs, fixed in its `patches/x86sim`. Both hit stupidsim's devices too
   replaced by a rename, so a running device keeps its library until it boots again; any other
   contents fail the command rather than being overwritten. Under `sudo`, Ubuntu sets `HOME` to
   root's, so the user's x86Sim is not found; `/opt` copies are then recognised by their contents
-  (x86Sim's own, or carrying a `.orig`). `setup` installs it after x86Sim's first run, and `boot`
-  checks it, failing with the `sudo` command when a copy needs root. `STUPIDSIM_X86SIM_PATCHES=0`
-  keeps x86Sim's own; a custom `STUPIDSIM_X86SIM` is left alone.
+  (x86Sim's own, or carrying a `.orig`). Copies this user may write are done first; any that need
+  root are then reported with the `sudo` command, for `restore` too. `setup` installs it before
+  Darling goes into `/opt` and again after x86Sim's first run, and `boot` checks it.
+  `STUPIDSIM_X86SIM_PATCHES=0` keeps x86Sim's own; a custom `STUPIDSIM_X86SIM` is left alone.
+- **Desktops need no extra step on a new install.** x86Sim's setup wizard installs Darling into
+  `/opt/x86sim` from `X86SIM_DARLING_STAGE`, which its `AppRun` sets to `usr/share/x86sim/darling`
+  beside itself, through `install-helper.sh` (`cp -a` of that tree; `tools/launcher/core/src/setup.rs`
+  and `build/release/AppRun`, 0.5.0). Run from the AppImage that tree is the image's own, read-only;
+  run from the extracted copy it is ours. So `install.sh` patches the extracted copy, and the README
+  and the installer now say to run x86Sim's setup from `~/.local/share/stupidsim/x86sim/AppRun`;
+  x86Sim's own password prompt then puts the patched translator into `/opt`. `install-helper.sh`
+  skips a Darling build already in `/opt`, so where x86Sim was set up before, the installer prints
+  the `sudo stupidsim-linux translator install` command. Checked on the box with a fresh data
+  directory: the installer patched the extracted copy, and the wizard's stage directory, read
+  through that `AppRun`, held the patched translator. The wizard's root step itself was not run.
 - **The store needs nothing new.** x86Sim keys its translation caches by `CODEGEN_VERSION`
   (`linux/arm64jit/jitcache.cpp`), which neither patch changes, and boots took 25 s with the patched
   translator as before, the warm cache loading.

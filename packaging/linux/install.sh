@@ -66,15 +66,31 @@ if [ "${fetch_x86sim}" = 1 ]; then
     rm -rf "${scratch}"
     echo "extracted x86Sim to ${extracted}"
   fi
-  cat <<NEXT
-
-Next: run x86Sim once to set it up (it downloads an iOS runtime from Apple, about 8 GB) and start
-a device:
-  ${target}
-Then put in x86Sim's translator with stupidsim's fixes (web workers, apps with crash reporters),
-which needs root for the copy x86Sim installs in /opt/x86sim:
+  # x86Sim's translator with stupidsim's fixes (web workers, apps with crash reporters), into the
+  # extracted copy. x86Sim's setup run from that copy installs Darling into /opt/x86sim from it
+  # (X86SIM_DARLING_STAGE is the extracted usr/share/x86sim/darling), so the patched translator
+  # goes there too with x86Sim's own password prompt. A Darling already in /opt/x86sim is not
+  # replaced by that setup, and needs the sudo command printed below.
+  translator_note=""
+  if ! command -v python3 >/dev/null; then
+    translator_note="
+python3 is not installed, so x86Sim's translator was not replaced. Install python3, then run:
+  ${prefix}/bin/stupidsim-linux translator install
+"
+  elif ! "${prefix}/bin/stupidsim-linux" translator install; then
+    translator_note="
+x86Sim is already set up here, with its own translator in /opt/x86sim. Put in the patched one
+(it needs root) with:
   sudo ${prefix}/bin/stupidsim-linux translator install
-and check everything stupidsim needs with:
+"
+  fi
+  cat <<NEXT
+${translator_note}
+Next: run x86Sim once from the extracted copy (not the AppImage, which would install its own
+translator) to set it up; it downloads an iOS runtime from Apple, about 8 GB, and asks for your
+password once. Then start a device:
+  ${extracted}/AppRun
+Then check everything stupidsim needs with:
   stupidsim doctor
 NEXT
 fi

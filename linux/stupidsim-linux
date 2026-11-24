@@ -280,13 +280,13 @@ def translator(action, quiet=False):
         fail(f"x86Sim {X86SIM_VERSION} is not installed (run `stupidsim-linux setup`, or install.sh)")
     if action == "restore":
         blocked = [path for path in copies if os.path.exists(path + ".orig") and not os.access(os.path.dirname(path), os.W_OK)]
+        for path in copies:
+            if os.path.exists(path + ".orig") and path not in blocked:
+                replace_file(path + ".orig", path)
+                log(f"x86Sim's own translator is back in {path}")
         if blocked:
             fail("putting x86Sim's translator back in " + ", ".join(blocked) + " needs root: run `sudo "
                  + os.path.realpath(sys.argv[0]) + " translator restore`")
-        for path in copies:
-            if os.path.exists(path + ".orig"):
-                replace_file(path + ".orig", path)
-                log(f"x86Sim's own translator is back in {path}")
         return
     ours = sha256_file(packaged_translator())
     states = {path: translator_state(path, ours) for path in copies}
@@ -300,15 +300,19 @@ def translator(action, quiet=False):
              + ", ".join(unknown) + " (`stupidsim-linux translator restore` puts back one stupidsim replaced)")
     todo = [path for path, state in states.items() if state == "x86sim"]
     blocked = [path for path in todo if not os.access(os.path.dirname(path), os.W_OK)]
-    if blocked:
-        fail("x86Sim's translator in " + ", ".join(blocked) + " needs root to replace with the patched one (web "
-             "workers, apps with crash reporters): run `sudo " + os.path.realpath(sys.argv[0]) + " translator install`, "
-             "or set STUPIDSIM_X86SIM_PATCHES=0 to keep x86Sim's own")
+    # The copies this user may write first: install.sh patches the extracted AppImage this way, so that x86Sim's own
+    # setup, run from it, copies the patched translator into /opt/x86sim. Then the ones that need root, if any.
     for path in todo:
+        if path in blocked:
+            continue
         if not os.path.exists(path + ".orig"):
             shutil.copy2(path, path + ".orig")
         replace_file(packaged_translator(), path)
         log(f"installed the patched translator in {path}")
+    if blocked:
+        fail("x86Sim's translator in " + ", ".join(blocked) + " needs root to replace with the patched one (web "
+             "workers, apps with crash reporters): run `sudo " + os.path.realpath(sys.argv[0]) + " translator install`, "
+             "or set STUPIDSIM_X86SIM_PATCHES=0 to keep x86Sim's own")
     if not todo and not quiet:
         log("the patched translator is already installed")
 
@@ -1299,6 +1303,7 @@ def setup(apps, name, no_boot, metal, runtime=None, features="lean"):
         fail(f"the store has no parts for x86Sim {X86SIM_VERSION} on {runtime} ({warm_key(runtime, '')}); it needs "
              f"`stupidsim-linux store build` with this x86Sim (docs/runbooks/new-ios-version.md)")
     install_x86sim()
+    ensure_translator()  # before Darling is installed into /opt from the extracted AppImage, so it gets the patched one
     ensure_darling()
     run_x86sim(["version"], capture=True)  # copies x86Sim's payload into its data directory once
     ensure_translator()  # after that copy, so it is patched too

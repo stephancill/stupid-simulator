@@ -7,9 +7,11 @@ under it until the next heading becomes that version's release notes in the upda
 
 - On Linux, web pages that start a web worker no longer crash, and apps with a crash reporter no
   longer slow to a crawl. The Linux package now carries x86Sim's translator with two fixes from
-  agent-sim, and `stupidsim-linux setup` and `boot` put it into x86Sim. On a desktop, run
-  `sudo stupidsim-linux translator install` once after x86Sim's setup. `translator status` and
-  `translator restore` show and undo it. Boot, tree reads and taps take as long as before.
+  agent-sim. The installer puts it into x86Sim, and x86Sim's setup should now be run from the
+  extracted copy (`~/.local/share/stupidsim/x86sim/AppRun`) so it installs the patched one. Where
+  x86Sim is already set up, run `sudo stupidsim-linux translator install` once. `stupidsim-linux
+  setup` and `boot` install it themselves; `translator status` and `translator restore` show and
+  undo it. Boot, tree reads and taps take as long as before.
 
 ## 0.8.6
 

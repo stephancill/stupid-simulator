@@ -74,17 +74,18 @@ tar xzf stupidsim-*-linux-x86_64.tar.gz && ./stupidsim-*-linux-x86_64/install.sh
 
 It puts `stupidsim` in `~/.local/bin`, downloads x86Sim's AppImage, checked against its published
 checksum, and extracts it to `~/.local/share/stupidsim/x86sim`. Run
-`~/.local/share/stupidsim/x86sim.AppImage` once: its setup downloads an iOS runtime from Apple
-(about 8 GB) and creates a device. Start the device, then `stupidsim doctor` and `stupidsim list`. A
+`~/.local/share/stupidsim/x86sim/AppRun` once (the extracted copy, not the AppImage; see below):
+its setup downloads an iOS runtime from Apple (about 8 GB) and creates a device. Start the device, then `stupidsim doctor` and `stupidsim list`. A
 device is named by its UDID or by its x86Sim name. `$STUPIDSIM_X86SIM` points `stupidsim` at
 another extracted copy of x86Sim (its `AppRun`).
 
 The package also carries x86Sim's translator with two fixes from
 [agent-sim](https://github.com/Developing-Gamer/agent-sim): without them every web page that starts
-a web worker crashes, and apps with a crash reporter run very slowly. Once x86Sim's setup has run,
-put it in with `sudo stupidsim-linux translator install` (it needs root for the copy x86Sim
-installed in `/opt/x86sim`); `translator status` shows each copy and `translator restore` puts
-x86Sim's own back. `stupidsim-linux setup` and `boot` install it themselves.
+a web worker crashes, and apps with a crash reporter run very slowly. The installer puts it into the
+extracted copy, and x86Sim's setup run from there installs it with the rest of x86Sim. If x86Sim was
+already set up on this machine, put it in with `sudo stupidsim-linux translator install`, which
+needs root for the copy in `/opt/x86sim`. `translator status` shows each copy and `translator
+restore` puts x86Sim's own back. `stupidsim-linux setup` and `boot` install it themselves.
 
 #### Throwaway machines: cloud agent sessions and CI
 
