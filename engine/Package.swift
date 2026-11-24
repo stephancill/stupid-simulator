@@ -13,6 +13,7 @@ let portableEngineSources = [
     "Adapter/AccessibilityTree.swift",
     "Adapter/NotificationBanner.swift",
     "Adapter/SimulatorAdapter.swift",
+    "Devices/RuntimeIdentifier.swift",
     "Host",
     "Input/CoordinateMapper.swift",
     "Input/DeviceOrientation.swift",
