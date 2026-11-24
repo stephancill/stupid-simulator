@@ -49,8 +49,14 @@ library into a given program; a Mac's simulator starts WebContent with a clean e
     headings were then in the tree. Before scrolling the link was centred on the screen's bottom
     edge, under Safari's toolbar, and the tap hit the toolbar;
   - Settings in front with that page still in Safari: no web elements, and reads of 0.16–0.25 s.
-- **Not yet:** hit testing (`ui-tree --at`) still answers from AXRuntime only, and a cloud session
-  has not been checked.
+- **In a fresh cloud session with 0.8.8 from the store** (4 vCPU): setup wrote the reader's line once
+  and boot was 59 s; `ui-tree` on the home screen 0.28–0.35 s and `tap --label General --verify`
+  about 3 s, as before. With Safari in front (on its Start Page: pages cannot load there, see the
+  cloud networking notes) five WebContent processes listed pages of Safari, and the first tree read
+  took 11.9 s, the next 0.97 s, against about 0.2 s on the WSL 2 box: the first walk builds WebKit's
+  trees, and a process that answers late holds a read for up to the 4 s budget. Only reads with a
+  web view in front pay it; `STUPIDSIM_WEBAX=0` at boot turns the reader off.
+- **Not yet:** hit testing (`ui-tree --at`) still answers from AXRuntime only.
 
 ## Linux: x86Sim's translator with agent-sim's fixes
 
