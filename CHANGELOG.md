@@ -3,7 +3,7 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
-## Unreleased
+## 0.8.9
 
 - Apple TV simulators can be driven from the command line:
   - `stupidsim remote <udid> down down select` presses Siri Remote buttons (up, down, left, right,

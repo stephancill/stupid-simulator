@@ -148,7 +148,7 @@ stupidsim wait --label About                   # wait for the next screen instea
 
 ## Apple TV (tvOS)
 
-Needs a `stupidsim` built after 0.8.8. A TV has no touchscreen, so it is driven with the Siri Remote,
+Needs `stupidsim` 0.8.9 or later. A TV has no touchscreen, so it is driven with the Siri Remote,
 and touch commands (`tap`, `swipe`, `pinch`, gestures) are refused rather than sent. Sending touch
 input crashed the TV's backboardd in older versions.
 
