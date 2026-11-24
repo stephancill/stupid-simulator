@@ -328,6 +328,65 @@ def replace_file(source, target):
     os.replace(temporary, target)
 
 
+# ---------------------------------------------------------------- the web page reader
+
+WEB_READER = "stupidsim-webax.dylib"
+WEB_CONTENT = "com.apple.WebKit.WebContent"
+
+
+def packaged_web_reader():
+    """stupidsim-webax.dylib (guest/stupidsim-webax.m): in the package's libexec/stupidsim beside bin/stupidsim-linux,
+    or in a checkout's guest/bin."""
+    if os.environ.get("STUPIDSIM_WEBAX"):
+        return os.environ["STUPIDSIM_WEBAX"]
+    here = os.path.dirname(os.path.realpath(__file__))
+    for path in (os.path.join(here, "..", "libexec", "stupidsim", WEB_READER), os.path.join(here, "..", "guest", "bin", WEB_READER)):
+        if os.path.exists(path):
+            return os.path.normpath(path)
+    fail(f"{WEB_READER} is not installed beside stupidsim-linux (libexec/stupidsim); reinstall stupidsim's Linux "
+         f"package, or set STUPIDSIM_WEBAX=0 to boot without reading web pages")
+
+
+def web_reader_line(device, reader):
+    """The per-program environment line that has x86Sim load the reader into WebKit's WebContent processes, after
+    the libraries the device's sim.env already inserts into every process. Device processes see Linux's root under
+    /Volumes/SystemRoot. The file is split on whitespace, so the path cannot have any."""
+    reader = os.path.realpath(reader)
+    if any(c.isspace() for c in reader):
+        fail(f"x86Sim's per-program environment cannot name {reader}: its path has a space. Move stupidsim's package, "
+             f"or set STUPIDSIM_WEBAX=0")
+    base = ""
+    with open(os.path.join(device, "sim.env")) as f:
+        for line in f:
+            if line.startswith("DYLD_INSERT_LIBRARIES="):
+                base = line.strip().split("=", 1)[1]
+    return f"{WEB_CONTENT} DYLD_INSERT_LIBRARIES={base + ':' if base else ''}/Volumes/SystemRoot{reader}"
+
+
+def ensure_web_reader(device):
+    """`ui-tree` reads web pages through stupidsim-webax, loaded into each WebContent process that starts from now on
+    through x86Sim's per-program environment file (<X86SIM_SCRATCH>/a64-penv, applied by its translator as each
+    device process starts: linux/arm64jit/host.cpp, a64_penv, 0.5.0). Other lines in the file are kept; an earlier
+    line of ours is replaced."""
+    if os.environ.get("STUPIDSIM_WEBAX") == "0":
+        return
+    # Its files from an earlier boot name processes that are gone (stupidsim checks before asking, but need not).
+    shutil.rmtree(os.path.join(device, "data", "tmp", "stupidsim-web"), ignore_errors=True)
+    penv = os.path.join(os.environ.get("X86SIM_SCRATCH") or x86sim_cache(), "a64-penv")
+    line = web_reader_line(device, packaged_web_reader())
+    try:
+        with open(penv) as f:
+            lines = f.read().splitlines()
+    except FileNotFoundError:
+        lines = []
+    kept = [l for l in lines if not (l.split()[:1] == [WEB_CONTENT] and WEB_READER in l)]
+    if kept + [line] != lines:
+        os.makedirs(os.path.dirname(penv), exist_ok=True)
+        with open(penv + ".tmp", "w") as f:
+            f.write("\n".join(kept + [line]) + "\n")
+        os.replace(penv + ".tmp", penv)
+
+
 def ensure_translator():
     if os.environ.get("STUPIDSIM_X86SIM") or os.environ.get("STUPIDSIM_X86SIM_PATCHES") == "0":
         return
@@ -424,6 +483,7 @@ def boot(name, metal="auto", timeout=900):
     ensure_runtime_dir()
     ensure_darling()
     ensure_translator()
+    ensure_web_reader(device)
     runtime = device_runtime(device)
     if is_lazy(runtime):
         mount_lazy(runtime)

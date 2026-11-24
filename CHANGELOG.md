@@ -3,6 +3,14 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## Unreleased
+
+- On Linux, `ui-tree`, `tap --label` and `wait` now reach web pages: the tree lists the page an app
+  shows (Safari, a WKWebView) after the app's own elements, with its links, headings, text and
+  fields. A library in the package, which `stupidsim-linux boot` has x86Sim load into WebKit's page
+  processes, reads them; the approach is agent-sim's. A tree read with a page on screen took about
+  0.2 s on the test machine.
+
 ## 0.8.7
 
 - On Linux, web pages that start a web worker no longer crash, and apps with a crash reporter no

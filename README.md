@@ -87,6 +87,12 @@ already set up on this machine, put it in with `sudo stupidsim-linux translator 
 needs root for the copy in `/opt/x86sim`. `translator status` shows each copy and `translator
 restore` puts x86Sim's own back. `stupidsim-linux setup` and `boot` install it themselves.
 
+On Linux `ui-tree` also lists the web page an app shows, in Safari or a WKWebView, after the app's
+own elements, so `tap --label` and `wait` reach links, headings and fields in it. A small library
+from the package, loaded into WebKit's page processes, reads them (on a Mac neither Xcode nor
+AXRuntime lists them). `stupidsim-linux boot` sets that up; a device started another way lists no
+web content. `STUPIDSIM_WEBAX=0` leaves it out.
+
 #### Throwaway machines: cloud agent sessions and CI
 
 Fetching and unpacking an iOS runtime from Apple, then booting a new device, takes about 20
@@ -248,7 +254,7 @@ or pasteboard sync has overwritten it.
 - **Other Apple platforms**: tvOS, watchOS and visionOS simulators are not supported.
 - **On Linux**, `notification expand` and `reply` are refused, a push that would run a Notification
   Service Extension needs `--skip-service-extension`, the viewer is x86Sim's, and `list --source` and
-  the window options of `view` are Mac only. Reading the tree takes about a second a call.
+  the window options of `view` are Mac only.
 
 Want to help close one of these? Pull requests are welcome. [ROADMAP.md](ROADMAP.md) is where that
 list is going: location, push, biometrics, proxy certificates, device management, and the project

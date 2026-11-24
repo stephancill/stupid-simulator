@@ -1,7 +1,9 @@
 #!/bin/bash
 # Builds stupidsim-guest, the arm64 iOS simulator program stupidsim runs inside x86Sim devices on
-# Linux (see guest/stupidsim-guest.m), into guest/bin, where the Linux package takes it from. It is
-# committed because Linux has no iOS simulator SDK to build it with.
+# Linux (see guest/stupidsim-guest.m), and stupidsim-webax.dylib, which x86Sim loads into WebKit's
+# WebContent processes to read web pages (see guest/stupidsim-webax.m), into guest/bin, where the
+# Linux package takes them from. They are committed because Linux has no iOS simulator SDK to build
+# them with.
 #
 # The committed build is signed with guest/stupidsim-guest.entitlements, which lets it read the
 # pasteboard without the paste prompt. A Mac's simulator refuses to start a program that claims
@@ -32,4 +34,13 @@ if [ "${1:-}" = "--mac-simulator" ]; then
 else
   codesign -s - -f --entitlements "${entitlements}" "${out}" >/dev/null 2>&1
 fi
+# The web page reader: only for x86Sim, which loads it through its per-program environment file.
+webax="$(dirname "${out}")/stupidsim-webax.dylib"
+xcrun --sdk iphonesimulator clang -arch arm64 -mios-simulator-version-min=17.0 -dynamiclib \
+  -fobjc-arc -Wall -Werror -Wno-objc-method-access -Os \
+  -framework Foundation -framework CoreGraphics \
+  "${repo_root}/guest/stupidsim-webax.m" -o "${webax}"
+codesign -s - -f "${webax}" >/dev/null 2>&1
+
 echo "${out}"
+echo "${webax}"

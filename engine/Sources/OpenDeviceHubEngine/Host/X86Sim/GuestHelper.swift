@@ -80,8 +80,18 @@ public struct GuestHelper: Sendable {
     // MARK: - Commands
 
     public func tree(springboard: Bool, device: X86SimDevice) throws -> AccessibilityElement {
+        try treeAndPID(springboard: springboard, device: device).tree
+    }
+
+    /// The tree and the pid of its app, as the app sees itself (inside Darling's pid namespace).
+    func treeAndPID(springboard: Bool, device: X86SimDevice) throws -> (tree: AccessibilityElement, pid: Int32?) {
         let json = try run(springboard ? ["tree", "--springboard"] : ["tree"], device: device)
-        return try JSONDecoder().decode(AccessibilityElement.self, from: json)
+        let tree = try JSONDecoder().decode(AccessibilityElement.self, from: json)
+        return (tree, try? JSONDecoder().decode(Root.self, from: json).pid)
+    }
+
+    private struct Root: Decodable {
+        let pid: Int32
     }
 
     public func element(at shown: CGPoint, device: X86SimDevice) throws -> AccessibilityHit? {

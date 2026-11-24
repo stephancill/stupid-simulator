@@ -89,8 +89,16 @@ public struct X86SimHost: SimulatorHost {
         (try? FileManager.default.attributesOfItem(atPath: file.path))?[.modificationDate] as? Date
     }
 
+    /// The app's tree from stupidsim-guest, with the elements of its web pages appended when
+    /// stupidsim-webax is loaded into WebKit's WebContent processes (`stupidsim-linux boot` sets
+    /// that up): AXRuntime stops at the web view.
     public func accessibilityTree(_ udid: String, springboard: Bool) throws -> AccessibilityElement {
-        try guest().tree(springboard: springboard, device: bootedDevice(udid))
+        let device = try bootedDevice(udid)
+        var (tree, pid) = try guest().treeAndPID(springboard: springboard, device: device)
+        if !springboard, let pid {
+            tree.children += WebPageReader(device: device).elements(hostPID: pid, screen: tree.frame)
+        }
+        return tree
     }
 
     public func accessibilityElement(_ udid: String, at shown: CGPoint) throws -> AccessibilityHit? {

@@ -75,6 +75,14 @@ https://github.com/Developing-Gamer/agent-sim, Apache-2.0 for agent-sim itself. 
 `linux/x86sim-patches` are agent-sim's `patches/x86sim`, unchanged, which agent-sim licenses under
 x86Sim's GPL-3.0-or-later.
 
+`guest/stupidsim-webax.m` is adapted from agent-sim's `hooks/ax.c` (Copyright the agent-sim
+authors, Apache-2.0): keeping a list of WebKit's `WKAccessibilityWebPageObject`s by swapping their
+`init` and `dealloc`, walking each page from `accessibilityRootObjectWrapper` through
+`accessibilityElements` and `accessibilityElementAtIndex:`, leaving out elements with nothing to
+read or act on, answering a page walked for the first time half a second later, and looking for
+requests on a thread of its own because an idle WebContent process was slow to run main-queue
+work. A copy of the Apache License 2.0 is at https://www.apache.org/licenses/LICENSE-2.0.
+
 ## Dependencies
 
 ### swift-argument-parser

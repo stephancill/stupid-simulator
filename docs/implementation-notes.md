@@ -3,6 +3,55 @@
 What stupid simulator changes relative to upstream [OpenDeviceHub](https://github.com/Mastersam07/OpenDeviceHub) (forked from `dev` at `e50f07f`,
 v0.2.0), and what has been verified where. Newest first.
 
+## Linux: web pages in the tree (`stupidsim-webax`)
+
+Neither tree listed a web page's content: on Xcode 27's iOS 27.0 simulator, Safari on example.com
+gave only its toolbar both through AXPTranslator (`stupidsim ui-tree`) and through AXRuntime
+(stupidsim-guest, spawned there). `-[AXElement children]` walks into the web view's scroll view
+but no further, and AXRuntime's `elementAtCoordinate:` over the page answers nil, while
+AXPTranslator's hit test (`ui-tree --at`) does reach the page's text. agent-sim reads pages inside
+WebKit's WebContent processes instead, and so does this now, on Linux only: x86Sim can load a
+library into a given program; a Mac's simulator starts WebContent with a clean environment
+(`launchctl setenv DYLD_INSERT_LIBRARIES` in the device did not reach it).
+
+- **`guest/stupidsim-webax.m`**, built by `scripts/build-guest.sh` into `guest/bin` and shipped as
+  `libexec/stupidsim/stupidsim-webax.dylib`. Adapted from agent-sim's `hooks/ax.c`: it swaps
+  `WKAccessibilityWebPageObject`'s `init` and `dealloc` to keep a list of pages, and walks each from
+  `accessibilityRootObjectWrapper` through `accessibilityElements` /
+  `accessibilityElementAtIndex:` to the leaves (`isAccessibilityElement`), whose
+  `accessibilityFrame`s are already screen points. Elements are written in the guest's tree shape,
+  with the guest's trait-to-role mapping. A page walked for the first time is answered half a second
+  later, once WebKit has built its tree and the frames have settled.
+- **Which app a page belongs to.** Each page object's `_accessibilityHostPid` is its app's pid, as
+  the app sees itself; its accessibility container is an `AXRemoteElement` naming the same pid.
+  stupidsim-guest's tree already carries the app's pid, so only the pages of the app in front are
+  merged, and only processes with such a page are asked. That matters: a WebContent process whose
+  app is in the background may be suspended and never answer, and a prewarmed one with no page did
+  not answer at all.
+- **Files**, in the device's `data/tmp/stupidsim-web`: `pages-<pid>` (each page's host pid,
+  refreshed once a second by a thread in the process), `req-<pid>` (looked for every 100 ms by that
+  thread, which runs the walk on the main run loop, as agent-sim found an idle WebContent process
+  slow to run main-queue work), `web-<pid>.json` (the answer, echoing the request's token). The host
+  (`WebPageReader.swift`) checks /proc that each pid still runs as this device's WebContent, waits up
+  to 4 s, keeps elements whose centre is on screen, once each, and appends them to the app's
+  children. A process that does not answer in time is left out rather than failing the tree.
+- **Loading it.** `stupidsim-linux boot` writes `com.apple.WebKit.WebContent
+  DYLD_INSERT_LIBRARIES=<sim.env's libraries>:/Volumes/SystemRoot<library>` into x86Sim's
+  per-program environment file (`<X86SIM_SCRATCH>/a64-penv`, applied by its translator as each
+  device process starts), keeping other lines and replacing an earlier one of ours, and clears the
+  reader's files from the last boot. The file is split on whitespace, so a library path with a
+  space fails the boot with a named error. `STUPIDSIM_WEBAX=0` skips it.
+- **Verified on the WSL 2 box** (x86Sim 0.5.0 with the patched translator, iOS 27.2):
+  - Safari on example.com: the toolbar, then all six paragraphs and the "Learn more" link, at the
+    positions the page shows them; tree reads 0.19–0.21 s (the first after a boot 3.1 s, with the
+    guest server starting and the page walked for the first time);
+  - `tap --label "Learn more" --verify` after scrolling it up opened iana.org, whose links and
+    headings were then in the tree. Before scrolling the link was centred on the screen's bottom
+    edge, under Safari's toolbar, and the tap hit the toolbar;
+  - Settings in front with that page still in Safari: no web elements, and reads of 0.16–0.25 s.
+- **Not yet:** hit testing (`ui-tree --at`) still answers from AXRuntime only, and a cloud session
+  has not been checked.
+
 ## Linux: x86Sim's translator with agent-sim's fixes
 
 [agent-sim](https://github.com/Developing-Gamer/agent-sim) runs the same x86Sim and found two

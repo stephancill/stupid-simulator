@@ -13,7 +13,9 @@ name="stupidsim-${version}-linux-x86_64"
 stage="${repo_root}/dist/${name}"
 
 [ "$(uname -s)" = Linux ] || { echo "build-linux.sh runs on Linux" >&2; exit 1; }
-[ -f "${repo_root}/guest/bin/stupidsim-guest" ] || { echo "guest/bin/stupidsim-guest is missing: run scripts/build-guest.sh on a Mac" >&2; exit 1; }
+for built in stupidsim-guest stupidsim-webax.dylib; do
+  [ -f "${repo_root}/guest/bin/${built}" ] || { echo "guest/bin/${built} is missing: run scripts/build-guest.sh on a Mac" >&2; exit 1; }
+done
 
 translator="$("${repo_root}/scripts/build-translator.sh")"
 swift build --package-path "${repo_root}/engine" -c release --static-swift-stdlib --product stupidsim
@@ -23,6 +25,7 @@ rm -rf "${stage}"
 install -d "${stage}/bin" "${stage}/libexec/stupidsim" "${stage}/share/stupidsim"
 install -m 0755 "${bin_dir}/stupidsim" "${stage}/bin/stupidsim"
 install -m 0755 "${repo_root}/guest/bin/stupidsim-guest" "${stage}/libexec/stupidsim/stupidsim-guest"
+install -m 0755 "${repo_root}/guest/bin/stupidsim-webax.dylib" "${stage}/libexec/stupidsim/stupidsim-webax.dylib"
 # x86Sim's translator with linux/x86sim-patches: GPL-3.0-or-later like x86Sim, its source being
 # x86Sim's tag plus those patches
 install -m 0755 "${translator}" "${stage}/libexec/stupidsim/$(basename "${translator}")"

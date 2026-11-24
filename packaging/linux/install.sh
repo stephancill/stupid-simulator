@@ -30,6 +30,7 @@ install -d "${prefix}/bin" "${prefix}/libexec/stupidsim" "${prefix}/share/stupid
 install -m 0755 "${here}/bin/stupidsim" "${prefix}/bin/stupidsim"
 install -m 0755 "${here}/bin/stupidsim-linux" "${prefix}/bin/stupidsim-linux"
 install -m 0755 "${here}/libexec/stupidsim/stupidsim-guest" "${prefix}/libexec/stupidsim/stupidsim-guest"
+install -m 0755 "${here}/libexec/stupidsim/stupidsim-webax.dylib" "${prefix}/libexec/stupidsim/stupidsim-webax.dylib"
 # x86Sim's translator with the fixes in share/stupidsim/x86sim-patches; `stupidsim-linux translator
 # install` puts it into x86Sim
 install -m 0755 "${here}"/libexec/stupidsim/libarm64jit-*.so "${prefix}/libexec/stupidsim/"

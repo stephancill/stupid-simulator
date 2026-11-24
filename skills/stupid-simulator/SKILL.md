@@ -32,8 +32,12 @@ there reports x86Sim, the in-device helper and each device's frames. Differences
 
 - A device is booted from x86Sim's launcher, not simctl. Name it by UDID or by its x86Sim name
   (`stupidsim ui-tree ss`); `booted` works as on a Mac.
-- Each tree read (`ui-tree`, `tap --label`, `wait`) takes about a second; input and screenshots are
-  instant.
+- The first tree read after a boot takes a few seconds; later ones about 0.2 s. Input and
+  screenshots are instant.
+- On Linux the tree also lists the web page an app shows (Safari, a WKWebView), after the app's own
+  elements, when the device was booted with `stupidsim-linux boot`: tap links and fields by
+  `--label` there instead of OCR. Content below Safari's toolbar is listed but not tappable; scroll
+  it up first.
 - `notification expand` and `reply` are refused; a payload with `"mutable-content": 1` needs
   `--skip-service-extension`. `view` opens x86Sim's own window.
 - The `scripts/` here wrap `xcrun simctl` and do not run on Linux. x86Sim's own command line
@@ -228,8 +232,8 @@ stupidsim notification <udid> open --match T               # tap it: opens the a
 
 ## When the tree is not enough: OCR
 
-Safari web content, WKWebView and extension popups are often missing from the tree. Read them with
-Vision OCR and tap what it finds:
+On a Mac, Safari web content, WKWebView and extension popups are missing from the tree (on Linux
+web pages are in it; see above). Read them with Vision OCR and tap what it finds:
 
 ```bash
 scripts/ocr/sim_ocr.sh <udid> --normalized --grep 'Sign in'
