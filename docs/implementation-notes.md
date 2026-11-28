@@ -105,8 +105,14 @@ reaches no server" below). x86Sim's 0.7.3 release notes say 0.7.2 and later send
     from the public store matched the local file's SHA-256.
   - A clean machine set up from the public store: 96 s, first boot 48 s, and the worker page loaded
     20 s after `openurl`.
-  - Not done: the base manifest was not re-traced with 0.7.4's first boot (those 21 units), and the
-    in-device helper was not compared with a Mac.
+  - The base pack now holds what 0.7.4's first boot opened beyond it: 211 files (app icons' `Assets.car`,
+    a few daemons and their launchd plists), from a clean machine left until its opened-file list
+    had not grown for a minute. The new `packs/base.tar.zst` (1.90 GB, was 1.87) lists every file
+    of the old one; `manifests/base.txt` has them under a comment line saying so. It went up the same
+    way, through a Worker that could write only those two keys. A clean setup's first boot then
+    fetched nothing on first use. The base is shared by every x86Sim version's machines, and only
+    gained files.
+  - Not done: the in-device helper was not compared with a Mac.
 
 ## Linux: web pages in the tree (`stupidsim-webax`)
 
