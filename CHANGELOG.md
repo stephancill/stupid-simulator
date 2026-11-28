@@ -11,6 +11,9 @@ under it until the next heading becomes that version's release notes in the upda
 - x86Sim 0.7.4 includes both translator fixes the Linux package used to carry (web workers, apps
   with a crash reporter), so the package no longer ships a patched translator and
   `stupidsim-linux translator` is gone.
+- `button home --verify` waits up to 10 s for the screen to change, not 3 s. Right after a rotation,
+  or soon after a boot, iOS went home but started the transition more than 3 s after the press, so
+  `--verify` reported that nothing happened. The wait ends at the first change.
 - `stupidsim-linux setup` and `boot` install `iproute2`, which x86Sim 0.7.4 needs to give the
   device its network settings, and `fuse3` for the runtime fetched on demand.
 
