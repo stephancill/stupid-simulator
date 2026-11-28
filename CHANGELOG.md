@@ -3,6 +3,17 @@
 The appcast generator reads this file. Each release is a `## <version>` heading, and everything
 under it until the next heading becomes that version's release notes in the update feed.
 
+## Unreleased
+
+- On Linux, stupidsim now uses x86Sim 0.7.4. In Claude Code cloud sessions and other Firecracker
+  VMs, Safari and apps' web views reach servers again: before, the connection opened but the
+  request was never sent (x86Sim issue #23).
+- x86Sim 0.7.4 includes both translator fixes the Linux package used to carry (web workers, apps
+  with a crash reporter), so the package no longer ships a patched translator and
+  `stupidsim-linux translator` is gone.
+- `stupidsim-linux setup` and `boot` install `iproute2`, which x86Sim 0.7.4 needs to give the
+  device its network settings, and `fuse3` for the runtime fetched on demand.
+
 ## 0.8.9
 
 - Apple TV simulators can be driven from the command line:
