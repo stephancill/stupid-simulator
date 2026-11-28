@@ -98,6 +98,13 @@ reaches no server" below). x86Sim's 0.7.3 release notes say 0.7.2 and later send
   - A fresh setup from the new parts (served locally, every other key from the store): fetched in
     92 s, first boot 46 s, 21 units fetched on first use and none failed, `lsd` idle; the worker
     page then loaded 20 s after `openurl`, Safari's launch included.
+  - Published on 28 Nov 2026. The session had no store writer key, so the parts went up through a
+    short-lived Worker deployed with stupid vault's Cloudflare link (an R2 binding, writes limited
+    to `warm/x86sim-0.7.4/` behind a one-off secret, refusing everything after three hours),
+    uploaded in 90 MB multipart parts with `device.json` last, then deleted. Each object read back
+    from the public store matched the local file's SHA-256.
+  - A clean machine set up from the public store: 96 s, first boot 48 s, and the worker page loaded
+    20 s after `openurl`.
   - Not done: the base manifest was not re-traced with 0.7.4's first boot (those 21 units), and the
     in-device helper was not compared with a Mac.
 
