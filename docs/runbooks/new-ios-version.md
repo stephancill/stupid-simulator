@@ -36,6 +36,14 @@ x86Sim first:
    https://github.com/x86sim/x86sim/releases.
 2. Update `X86SIM_VERSION` and `X86SIM_SHA256` in `linux/stupidsim-linux` and
    `packaging/linux/install.sh` (they must match).
+
+   A lazy machine is enough for the warm parts; it does not need the whole runtime. That is how
+   0.7.4's were made, in a cloud session: `stupidsim-linux setup --no-boot` with the previous pins
+   (the previous template device and the lazy runtime), then the new pins: install the new x86Sim
+   and its Darling, delete `~/.cache/x86sim/jc-<build>`, `stupidsim-linux mount`, `aot build
+   --full`, then put the previous template device back (clean, as fetched), `boot`, `shutdown`
+   and `store warm`. Try the parts before publishing with a fresh setup against a local server
+   that serves them and passes every other key through to the store (`STUPIDSIM_PUBLIC_STORE`).
 3. For each runtime already in the store, build and publish the new x86Sim's warm parts. Do
    step 2 without fetching the runtime: run `aot build --full`, and check that it reports every
    chunk built. If every chunk fails, Darling cannot start (see the next paragraph). Then boot
@@ -63,7 +71,7 @@ Upload only `device.tar.zst` and `device.json` from it. Check them first: `devic
 boot from it should leave `lsd` idle.
 
 `stupidsim-linux` installs x86Sim's Darling into `/opt/x86sim` (x86Sim's system mode), because
-0.5.0's user-namespace mode could not start Darling here. On the machine that builds the store,
+0.5.0's user-namespace mode could not start Darling here (0.5.2 fixed that; system mode stays). On the machine that builds the store,
 run once as root: `sudo stupidsim-linux boot` (or the `sh .../install-helper.sh install ...` line
 it prints). A Darling that cannot start shows up first as `aot build` failing every chunk.
 

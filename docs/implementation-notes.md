@@ -55,6 +55,65 @@ Verified on Xcode 27 (27A266a) with an Apple TV 4K (3rd generation) 1080p device
 - **`doctor`** reports a TV as having no body rather than as missing one.
 - **Checked on the iPhone simulator afterwards:** `ui-tree`, `tap --role`, `type --verify`, `key`,
   `button home --verify` and `ui-tree --app`, all as before.
+## x86Sim 0.7.4
+
+`stupidsim-linux` and `packaging/linux/install.sh` pin x86Sim 0.7.4 (was 0.5.0). The reason was
+https://github.com/x86sim/x86sim/issues/23: in a Firecracker VM, which is what a Claude Code cloud
+session runs in, Safari connected to a server and never sent its request (see "Why a cloud device
+reaches no server" below). x86Sim's 0.7.3 release notes say 0.7.2 and later send every request.
+
+- **No more patched translator.** 0.7.4's `libarm64jit.so` has both of agent-sim's fixes, written
+  its own way: `handlers.cpp` publishes each new thread's guest stack (`stack_publish`, `g_stacks`)
+  and answers `pthread_get_stackaddr_np` for it, and `signals.cpp` calls `retake_host_signal` after
+  every guest `sigaction`, which puts `on_fault` back on `SIGSEGV` and `SIGBUS`. Neither patch
+  applied to 0.7.4 anyway. `linux/x86sim-patches`, `scripts/build-translator.sh`, the package's
+  `libarm64jit-<version>.so` and `stupidsim-linux translator` are gone; `install.sh` removes an
+  older package's translator from the prefix.
+- **`ip` is needed at boot.** 0.7.x's `linux/hostnet/hostnet.py` reads the default route and the
+  interface's addresses with `ip` and writes the configd keys the device's `netconfig` loads. A
+  fresh cloud VM has no iproute2: the script died with `FileNotFoundError: 'ip'`, so the device got
+  no network keys at all, not even `Plugin:InterfaceNamer`, which upstream says
+  `SCNetworkInterfaceCopyAll()` waits on forever. `ensure_tools` (setup, and now boot too) installs
+  iproute2, and fuse3 for the lazy runtime, which setup did not install either.
+- **Device state moved** to `var/run-a64-<name>` and `a64prefix-<name>` per device (0.5.1/0.5.2).
+  Nothing in stupidsim read the old shared paths.
+- **Warm parts.** `aot build --full` built 1,100 chunks (1,729 MB of code) in 50 s and left out the
+  3 coldest library chunks to fit its 1,744 MB slab. The 0.5.0 template device, booted once on 0.7.4
+  at root's path, is the 0.7.4 template: `warm/x86sim-0.7.4/device.tar.zst` 1.03 GB and
+  `jitcache.tar.zst` 0.87 GB (0.5.0's were 1.00 and 0.74 GB).
+- **Verified in a Claude Code cloud session** (Firecracker, kernel 6.18.44, 4 vCPU, 15 GB, Ubuntu
+  24.04), x86Sim 0.7.4 with its own translator, iOS 27.2 (24B8117):
+  - `x86sim openurl http://127.0.0.1:8771/` on a page that starts a web worker: Safari requested
+    the page, then `worker.js`, and the worker answered ("worker says 42" in `ui-tree` and the
+    screenshot). 8 more loads of it each took 2.6–4.2 s from `openurl` to the worker's answer.
+    Before, no request ever reached the server.
+  - `http://example.com/` loaded too. Over HTTPS Safari showed "This website may be impersonating
+    example.com": the session's egress proxy re-signs TLS with its own CA, which the device does
+    not trust. That is the sandbox, not x86Sim; News says "Apple News Unavailable" for the same
+    reason.
+  - News opened to its welcome screen (without patch 0002 agent-sim saw it stay black).
+  - `tap --label General --verify` 3.3 s, Safari's `rotate landscapeLeft --verify`, paste and copy.
+    Home reached the home screen every time, but the home screen took 5–7 s to appear after leaving
+    Safari or Settings, so `button home --verify` (3 s) passed on 3 of 5 presses.
+  - A fresh setup from the new parts (served locally, every other key from the store): fetched in
+    92 s, first boot 46 s, 21 units fetched on first use and none failed, `lsd` idle; the worker
+    page then loaded 20 s after `openurl`, Safari's launch included.
+  - Published on 28 Nov 2026. The session had no store writer key, so the parts went up through a
+    short-lived Worker deployed with stupid vault's Cloudflare link (an R2 binding, writes limited
+    to `warm/x86sim-0.7.4/` behind a one-off secret, refusing everything after three hours),
+    uploaded in 90 MB multipart parts with `device.json` last, then deleted. Each object read back
+    from the public store matched the local file's SHA-256.
+  - A clean machine set up from the public store: 96 s, first boot 48 s, and the worker page loaded
+    20 s after `openurl`.
+  - The base pack now holds what 0.7.4's first boot opened beyond it: 211 files (app icons' `Assets.car`,
+    a few daemons and their launchd plists), from a clean machine left until its opened-file list
+    had not grown for a minute. The new `packs/base.tar.zst` (1.90 GB, was 1.87) lists every file
+    of the old one; `manifests/base.txt` has them under a comment line saying so. It went up the same
+    way, through a Worker that could write only those two keys. A clean setup's first boot then
+    fetched nothing on first use. The base is shared by every x86Sim version's machines, and only
+    gained files.
+  - Not done: the in-device helper was not compared with a Mac.
+
 ## Linux: web pages in the tree (`stupidsim-webax`)
 
 Neither tree listed a web page's content: on Xcode 27's iOS 27.0 simulator, Safari on example.com
@@ -111,6 +170,8 @@ library into a given program; a Mac's simulator starts WebContent with a clean e
 - **Not yet:** hit testing (`ui-tree --at`) still answers from AXRuntime only.
 
 ## Linux: x86Sim's translator with agent-sim's fixes
+
+Superseded by x86Sim 0.7.4, which has both fixes (see "x86Sim 0.7.4").
 
 [agent-sim](https://github.com/Developing-Gamer/agent-sim) runs the same x86Sim and found two
 translator bugs, fixed in its `patches/x86sim`. Both hit stupidsim's devices too.
@@ -203,10 +264,11 @@ translator bugs, fixed in its `patches/x86sim`. Both hit stupidsim's devices too
     `SIOCGIWNAME` (ENOTTY) and `TCP_INFO` (EOPNOTSUPP) on UDP probe sockets, `PR_SET_VMA_ANON_NAME`
     (EINVAL, the translator naming its memory) and more of a `futex` EINVAL the box also has.
   It happens with x86Sim's own translator too (a fresh VM with the stock 0.5.0 `libarm64jit.so`).
-  Reported as https://github.com/x86sim/x86sim/issues/23. Unresolved. The send is gated on an event
-  from Darling's kqueue emulation
-  (`darling-libkqueue/src/linux/socket.c`, `EVFILT_SOCK`, and the write filter), so the next step is
-  a Darling build that logs those knotes, or an x86Sim issue with this reproduction. Scripts:
+  Reported as https://github.com/x86sim/x86sim/issues/23, and fixed upstream: closed on 27 Nov 2026
+  by x86sim/x86sim#62; 0.7.2 and later send every request. stupidsim moved to x86Sim 0.7.4 for it
+  (see "x86Sim 0.7.4" above).
+  The send was gated on an event from Darling's kqueue emulation
+  (`darling-libkqueue/src/linux/socket.c`, `EVFILT_SOCK`, and the write filter). Scripts:
   `net-accept.sh`, `net-strace2.sh`, `net-errs2.sh`, `net-race.sh` (kept with the handover notes).
 
 ## The lazy runtime's server keeps entries and directory listings

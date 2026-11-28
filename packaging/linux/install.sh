@@ -11,8 +11,8 @@
 # downloaded, not bundled.
 set -euo pipefail
 
-X86SIM_VERSION=0.5.0
-X86SIM_SHA256=4feaf1730c71fa196d5db9291950d32c3dc476c3ba2d0565aa797f9c66439bb0
+X86SIM_VERSION=0.7.4
+X86SIM_SHA256=69e66cefa33c41c910a8a3cebad92e088bdbfca345012a4eb8ecfac5279ab3cc
 X86SIM_URL="https://github.com/x86sim/x86sim/releases/download/v${X86SIM_VERSION}/x86sim-${X86SIM_VERSION}-x86_64.AppImage"
 
 prefix="${HOME}/.local"
@@ -31,11 +31,8 @@ install -m 0755 "${here}/bin/stupidsim" "${prefix}/bin/stupidsim"
 install -m 0755 "${here}/bin/stupidsim-linux" "${prefix}/bin/stupidsim-linux"
 install -m 0755 "${here}/libexec/stupidsim/stupidsim-guest" "${prefix}/libexec/stupidsim/stupidsim-guest"
 install -m 0755 "${here}/libexec/stupidsim/stupidsim-webax.dylib" "${prefix}/libexec/stupidsim/stupidsim-webax.dylib"
-# x86Sim's translator with the fixes in share/stupidsim/x86sim-patches; `stupidsim-linux translator
-# install` puts it into x86Sim
-install -m 0755 "${here}"/libexec/stupidsim/libarm64jit-*.so "${prefix}/libexec/stupidsim/"
-install -d "${prefix}/share/stupidsim/x86sim-patches"
-install -m 0644 "${here}"/share/stupidsim/x86sim-patches/* "${prefix}/share/stupidsim/x86sim-patches/"
+# Packages up to 0.8.9 carried a patched x86Sim 0.5.0 translator; x86Sim 0.7.4 has both fixes.
+rm -rf "${prefix}"/libexec/stupidsim/libarm64jit-*.so "${prefix}/share/stupidsim/x86sim-patches"
 install -m 0644 "${here}/share/stupidsim/version" "${prefix}/share/stupidsim/version"
 echo "installed stupidsim $(cat "${here}/share/stupidsim/version") to ${prefix}/bin/stupidsim"
 
@@ -67,29 +64,10 @@ if [ "${fetch_x86sim}" = 1 ]; then
     rm -rf "${scratch}"
     echo "extracted x86Sim to ${extracted}"
   fi
-  # x86Sim's translator with stupidsim's fixes (web workers, apps with crash reporters), into the
-  # extracted copy. x86Sim's setup run from that copy installs Darling into /opt/x86sim from it
-  # (X86SIM_DARLING_STAGE is the extracted usr/share/x86sim/darling), so the patched translator
-  # goes there too with x86Sim's own password prompt. A Darling already in /opt/x86sim is not
-  # replaced by that setup, and needs the sudo command printed below.
-  translator_note=""
-  if ! command -v python3 >/dev/null; then
-    translator_note="
-python3 is not installed, so x86Sim's translator was not replaced. Install python3, then run:
-  ${prefix}/bin/stupidsim-linux translator install
-"
-  elif ! "${prefix}/bin/stupidsim-linux" translator install; then
-    translator_note="
-x86Sim is already set up here, with its own translator in /opt/x86sim. Put in the patched one
-(it needs root) with:
-  sudo ${prefix}/bin/stupidsim-linux translator install
-"
-  fi
   cat <<NEXT
-${translator_note}
-Next: run x86Sim once from the extracted copy (not the AppImage, which would install its own
-translator) to set it up; it downloads an iOS runtime from Apple, about 8 GB, and asks for your
-password once. Then start a device:
+
+Next: run x86Sim once from the extracted copy to set it up; it downloads an iOS runtime from
+Apple, about 8 GB, and asks for your password once. Then start a device:
   ${extracted}/AppRun
 Then check everything stupidsim needs with:
   stupidsim doctor

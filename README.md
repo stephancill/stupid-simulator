@@ -74,18 +74,10 @@ tar xzf stupidsim-*-linux-x86_64.tar.gz && ./stupidsim-*-linux-x86_64/install.sh
 
 It puts `stupidsim` in `~/.local/bin`, downloads x86Sim's AppImage, checked against its published
 checksum, and extracts it to `~/.local/share/stupidsim/x86sim`. Run
-`~/.local/share/stupidsim/x86sim/AppRun` once (the extracted copy, not the AppImage; see below):
+`~/.local/share/stupidsim/x86sim/AppRun` once:
 its setup downloads an iOS runtime from Apple (about 8 GB) and creates a device. Start the device, then `stupidsim doctor` and `stupidsim list`. A
 device is named by its UDID or by its x86Sim name. `$STUPIDSIM_X86SIM` points `stupidsim` at
 another extracted copy of x86Sim (its `AppRun`).
-
-The package also carries x86Sim's translator with two fixes from
-[agent-sim](https://github.com/Developing-Gamer/agent-sim): without them every web page that starts
-a web worker crashes, and apps with a crash reporter run very slowly. The installer puts it into the
-extracted copy, and x86Sim's setup run from there installs it with the rest of x86Sim. If x86Sim was
-already set up on this machine, put it in with `sudo stupidsim-linux translator install`, which
-needs root for the copy in `/opt/x86sim`. `translator status` shows each copy and `translator
-restore` puts x86Sim's own back. `stupidsim-linux setup` and `boot` install it themselves.
 
 On Linux `ui-tree` also lists the web page an app shows, in Safari or a WKWebView, after the app's
 own elements, so `tap --label` and `wait` reach links, headings and fields in it. A small library
@@ -313,9 +305,8 @@ Use `scripts/build.sh` rather than `swift build` directly: SwiftPM records the d
 the linked SDK version, and AppKit then gives the window its pre macOS 26 appearance. Tests that
 need a booted simulator are gated behind `ODH_INTEGRATION=1` and skip otherwise.
 
-On Linux, with Swift 6.2 or newer, zlib's headers (`zlib1g-dev`), and clang, cmake and ninja,
-`scripts/build-linux.sh` builds the command line and the patched x86Sim translator
-(`scripts/build-translator.sh`) and packages them as `dist/stupidsim-<version>-linux-x86_64.tar.gz`. The helper it
+On Linux, with Swift 6.2 or newer and zlib's headers (`zlib1g-dev`), `scripts/build-linux.sh`
+builds the command line and packages it as `dist/stupidsim-<version>-linux-x86_64.tar.gz`. The helper it
 runs inside x86Sim's devices, `guest/bin/stupidsim-guest`, is an iOS simulator program and is built
 on a Mac with `scripts/build-guest.sh`.
 
