@@ -203,10 +203,14 @@ translator bugs, fixed in its `patches/x86sim`. Both hit stupidsim's devices too
     `SIOCGIWNAME` (ENOTTY) and `TCP_INFO` (EOPNOTSUPP) on UDP probe sockets, `PR_SET_VMA_ANON_NAME`
     (EINVAL, the translator naming its memory) and more of a `futex` EINVAL the box also has.
   It happens with x86Sim's own translator too (a fresh VM with the stock 0.5.0 `libarm64jit.so`).
-  Reported as https://github.com/x86sim/x86sim/issues/23. Unresolved. The send is gated on an event
-  from Darling's kqueue emulation
-  (`darling-libkqueue/src/linux/socket.c`, `EVFILT_SOCK`, and the write filter), so the next step is
-  a Darling build that logs those knotes, or an x86Sim issue with this reproduction. Scripts:
+  Reported as https://github.com/x86sim/x86sim/issues/23, and fixed upstream: closed on 27 Nov 2026
+  by x86sim/x86sim#62. x86Sim 0.7.3's release notes say it was reproduced on 0.5.0 and 0.6.0 in a
+  Firecracker VM and that 0.7.2 and later send every request (fixed since 0.7.0). stupidsim still
+  pins 0.5.0, so cloud sessions keep the stall until the pin moves to 0.7.2 or later. That needs
+  the store's `warm/x86sim-<version>/` parts built for the new version and the translator patches
+  (`linux/x86sim-patches`) rebuilt against it (runbook: `docs/runbooks/new-ios-version.md`, step 1).
+  The send was gated on an event from Darling's kqueue emulation
+  (`darling-libkqueue/src/linux/socket.c`, `EVFILT_SOCK`, and the write filter). Scripts:
   `net-accept.sh`, `net-strace2.sh`, `net-errs2.sh`, `net-race.sh` (kept with the handover notes).
 
 ## The lazy runtime's server keeps entries and directory listings
